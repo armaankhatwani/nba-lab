@@ -2,19 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NBA Lab — Rewrite the Season</title>
-<link rel="stylesheet" href="/static/style.css">
+<title>NBA Lab — Rewrite the Season</title><link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header><div><span class="eyebrow">NBA LAB / SEASON ENGINE</span><h1>Rewrite the season.</h1><p>Freeze the league at any date. Simulate thousands of futures. Change one assumption and measure the ripple.</p></div><div id="source" class="source"></div></header>
+<header><div><span class="eyebrow">NBA LAB / COUNTERFACTUAL ENGINE</span><h1>Rewrite the season.</h1><p>Freeze the league at any date. Branch history. Simulate thousands of paired futures. Measure what changes downstream.</p></div><div id="source" class="source"></div></header>
 <main>
 <section class="controls panel">
+  <div class="mode"><button data-mode="flip" class="active">FLIP A GAME</button><button data-mode="strength">STRENGTH TEST</button></div>
   <label>As-of date<input id="asof" type="date" value="2026-01-15"></label>
   <label>Monte Carlo trials<select id="trials"><option>1000</option><option selected>5000</option><option>10000</option><option>25000</option></select></label>
-  <label>What-if team<select id="team"></select></label>
-  <label>Research strength adjustment<div class="range-row"><input id="delta" type="range" min="-200" max="200" step="10" value="80"><strong id="delta-value">+80 Elo</strong></div></label>
-  <button id="run">SIMULATE BOTH WORLDS <span>↗</span></button>
-  <p class="note">The intervention is deliberately abstract for now. It becomes a real injury/trade/rotation scenario only after a validated player-impact layer exists.</p>
+  <div id="flip-controls">
+    <label>Team filter<select id="game-team"></select></label>
+    <label>Historical game<select id="game"></select></label>
+    <p class="note">The selected final is reversed, the league state is rebuilt, and both futures reuse the same random stream.</p>
+  </div>
+  <div id="strength-controls" hidden>
+    <label>What-if team<select id="team"></select></label>
+    <label>Research strength adjustment<div class="range-row"><input id="delta" type="range" min="-200" max="200" step="10" value="80"><strong id="delta-value">+80 Elo</strong></div></label>
+    <p class="note">Abstract research control only—not a player/trade effect. It stays separate until player impact is validated.</p>
+  </div>
+  <button id="run">REWRITE HISTORY <span>↗</span></button>
 </section>
 <section class="workspace">
   <div class="hero-grid">
@@ -22,9 +29,8 @@
     <article class="panel metric"><span>SIMULATIONS</span><strong id="sim-count">—</strong><small>paired baseline + altered worlds</small></article>
     <article class="panel metric"><span>BIGGEST RIPPLE</span><strong id="ripple">—</strong><small>largest expected-win shift</small></article>
   </div>
-  <div class="panel focus" id="focus"><p>Run a simulation to compare two futures.</p></div>
+  <div class="panel focus" id="focus"><p>Choose a prior game and branch history.</p></div>
   <div class="panel table-panel"><div class="table-head"><div><span class="eyebrow">LEAGUE DISTRIBUTION</span><h2>Expected wins & postseason paths</h2></div><span id="timing"></span></div><div class="scroll"><table><thead><tr><th>Team</th><th>Record now</th><th>Expected wins</th><th>80% range</th><th>No. 1 seed</th><th>Top 6</th><th>Play-in</th><th>Δ wins</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </section>
-</main>
-<script src="/static/app.js"></script>
+</main><script src="/static/app.js"></script>
 </body></html>
