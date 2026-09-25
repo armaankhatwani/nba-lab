@@ -13,12 +13,12 @@
       <button class="nav-item" data-view="season"><span>↗</span>Season Lab</button>
       <button class="nav-item" data-view="timeline"><span>⌁</span>Timeline Lab</button>
       <button class="nav-item" data-view="model"><span>◎</span>Model Lab</button>
-      <div class="nav-section">NEXT LABS</div>
+      <div class="nav-section">MORE LABS</div>
       <button class="nav-item" data-view="awards"><span>★</span>Awards Lab</button>
       <button class="nav-item" data-view="impact"><span>±</span>Player Impact</button>
       <button class="nav-item" data-view="lineup"><span>⬡</span>Lineup Lab</button>
       <button class="nav-item" data-view="leverage"><span>⚖</span>Leverage Lab</button>
-      <button class="nav-item future" data-view="game"><span>▶</span>Game Replay</button>
+      <button class="nav-item" data-view="game"><span>▶</span>Game Replay</button>
     </nav>
     <div class="sidebar-foot"><div id="source-dot" class="dot"></div><div><strong id="source-short">Loading data…</strong><span id="source-detail"></span></div></div>
   </aside>
@@ -28,14 +28,17 @@
 
     <main class="content">
       <section class="view active" id="view-home">
-        <div class="hero-copy"><p>One host for simulation, historical counterfactuals, model evaluation, awards, player impact, lineups, and eventually possession-level game replay.</p></div>
+        <div class="hero-copy"><p>One host for season simulation, counterfactuals, awards, player impact, lineups, schedule leverage, and historical game replay.</p></div>
         <div class="lab-grid">
-          <article class="lab-card featured" data-open="season"><span class="card-num">01</span><div><span class="status live">LIVE</span><h2>Season Lab</h2><p>Freeze any date, branch history, and simulate the rest of the regular season through the Finals.</p></div><div class="card-arrow">↗</div></article>
-          <article class="lab-card" data-open="matchup"><span class="card-num">02</span><div><span class="status live">LIVE</span><h2>Matchup Lab</h2><p>Freeze team strength at any date and simulate a single game or playoff series.</p></div><div class="card-arrow">↗</div></article>\n          <article class="lab-card" data-open="timeline"><span class="card-num">03</span><div><span class="status live">LIVE</span><h2>Timeline Lab</h2><p>Replay a team's season as an evolving rating and record instead of a static final table.</p></div><div class="card-arrow">↗</div></article>
-          <article class="lab-card" data-open="model"><span class="card-num">04</span><div><span class="status live">LIVE</span><h2>Model Lab</h2><p>Inspect calibration, backtests, assumptions, and the promotion gate for future models.</p></div><div class="card-arrow">↗</div></article>
-          <article class="lab-card muted"><span class="card-num">07</span><div><span class="status next">NEXT</span><h2>Awards Lab</h2><p>Point-in-time MVP race replay, remaining-season award simulation, and voter-model experiments.</p></div></article>
-          <article class="lab-card muted"><span class="card-num">05</span><div><span class="status next">NEXT</span><h2>Player Impact</h2><p>RAPM-style player value with uncertainty, then player-aware injuries, trades, and what-ifs.</p></div></article>
-          <article class="lab-card muted"><span class="card-num">06</span><div><span class="status queued">QUEUED</span><h2>Lineup + Game Lab</h2><p>Estimate unseen lineups, then rewrite a historical game from a selected possession.</p></div></article>
+          <article class="lab-card featured" data-open="season"><span class="card-num">01</span><div><span class="status live">LIVE</span><h2>Season Lab</h2><p>Freeze any date, branch history, and simulate the remaining season through the Finals.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="matchup"><span class="card-num">02</span><div><span class="status live">LIVE</span><h2>Matchup Lab</h2><p>Freeze team strength at any date and simulate a single game or playoff series.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="timeline"><span class="card-num">03</span><div><span class="status live">LIVE</span><h2>Timeline Lab</h2><p>Replay a team's season as an evolving rating and record instead of a final snapshot.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="model"><span class="card-num">04</span><div><span class="status live">LIVE</span><h2>Model Lab</h2><p>Inspect calibration, backtests, assumptions, and promotion gates for deployed models.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="awards"><span class="card-num">05</span><div><span class="status live">LIVE</span><h2>Awards Lab</h2><p>Scrub through the MVP race and simulate alternate season endings from any date.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="impact"><span class="card-num">06</span><div><span class="status live">LIVE</span><h2>Player Impact</h2><p>Regularized adjusted plus-minus with exposure and shrinkage diagnostics.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="lineup"><span class="card-num">07</span><div><span class="status live">LIVE</span><h2>Lineup Lab</h2><p>Build two five-man units and blend RAPM priors with observed lineup evidence.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="leverage"><span class="card-num">08</span><div><span class="status live">LIVE</span><h2>Leverage Lab</h2><p>Rank upcoming games by how much each possible result can reshape the season.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card featured" data-open="game"><span class="card-num">09</span><div><span class="status live">LIVE</span><h2>Game Replay</h2><p>Scrub into a historical game, edit the score state, and simulate forward from that moment.</p></div><div class="card-arrow">↗</div></article>
         </div>
         <div class="overview-strip">
           <div><span>ENGINE</span><strong>Point-in-time Monte Carlo</strong></div>
@@ -123,7 +126,53 @@
         <div class="panel leverage-board"><div class="section-head"><div><span class="eyebrow">PRESSURE BOARD</span><h2>Upcoming games ranked by downstream consequence</h2></div><span id="lev-status">run the model</span></div><div id="leverage-rows" class="leverage-rows"></div></div>
       </section>
 
-      <section class="view future-view" id="view-game"><span class="eyebrow">PLANNED MODULE</span><h2>Game Replay</h2><p>Open a historical game at a chosen possession, alter the lineup or event, and simulate forward from that exact state.</p></section>
+      <section class="view" id="view-game">
+        <div class="replay-toolbar panel">
+          <div><span class="eyebrow">GAME REPLAY / STATE COUNTERFACTUAL</span><h2>Simulate from here.</h2><p>Scrub to any event, edit the scoreboard, and compare paired futures from the exact same game state.</p></div>
+          <div class="replay-controls"><label>Replay game<select id="replay-game"></select></label><label>Trials<select id="replay-trials"><option>1000</option><option selected>5000</option><option>10000</option><option>25000</option></select></label><span id="replay-source">Loading…</span></div>
+        </div>
+
+        <div class="replay-grid">
+          <div class="panel replay-stage">
+            <div class="replay-scoreboard">
+              <div class="replay-team away"><span id="replay-away-team">AWAY</span><strong id="replay-away-score">0</strong></div>
+              <div class="replay-clock"><span id="replay-period">Q1</span><strong id="replay-clock">12:00</strong><small id="replay-event-number">event 0</small></div>
+              <div class="replay-team home"><span id="replay-home-team">HOME</span><strong id="replay-home-score">0</strong></div>
+            </div>
+            <div class="replay-event-card"><span id="replay-event-team">TIP</span><strong id="replay-event-description">Choose a game.</strong><small id="replay-event-type"></small></div>
+            <div class="replay-scrubber"><input id="replay-slider" type="range" min="0" max="0" value="0"><div><span>TIP</span><span id="replay-slider-label">0 / 0</span><span>FINAL</span></div></div>
+            <div id="replay-nearby-events" class="replay-nearby-events"></div>
+          </div>
+
+          <aside class="panel replay-intervention">
+            <span class="eyebrow">EDIT THIS STATE</span><h2>Score intervention</h2>
+            <p>Apply a hypothetical score change at this timestamp. Both worlds reuse the same random stream.</p>
+            <div class="score-edit-grid">
+              <label><span id="replay-edit-home-label">HOME</span><input id="replay-home-delta" type="number" min="-20" max="20" value="0"></label>
+              <label><span id="replay-edit-away-label">AWAY</span><input id="replay-away-delta" type="number" min="-20" max="20" value="0"></label>
+            </div>
+            <div class="replay-presets">
+              <button data-replay-preset="home2">HOME +2</button><button data-replay-preset="home3">HOME +3</button>
+              <button data-replay-preset="away2">AWAY +2</button><button data-replay-preset="away3">AWAY +3</button>
+              <button data-replay-preset="clear">CLEAR</button>
+            </div>
+            <button class="primary" id="replay-run">SIMULATE FROM HERE ↗</button>
+            <div class="replay-model-note"><strong>BASELINE MODEL</strong><span>Pregame Elo + actual score/time + historical final-margin variance. This is not yet a possession/player causal model.</span></div>
+          </aside>
+        </div>
+
+        <div class="metric-grid replay-metrics">
+          <article class="panel metric"><span>BASELINE HOME WIN</span><strong id="replay-base-prob">—</strong><small>from selected state</small></article>
+          <article class="panel metric"><span>ALTERED HOME WIN</span><strong id="replay-alt-prob">—</strong><small>after score edit</small></article>
+          <article class="panel metric"><span>WIN PROB SWING</span><strong id="replay-prob-delta">—</strong><small>percentage points</small></article>
+          <article class="panel metric"><span>EXPECTED MARGIN</span><strong id="replay-margin">—</strong><small>altered home margin</small></article>
+        </div>
+
+        <div class="replay-results">
+          <div class="panel replay-prob-panel"><div class="section-head"><div><span class="eyebrow">WIN PROBABILITY</span><h2>Baseline vs. altered state</h2></div><span id="replay-run-note">run a simulation</span></div><div id="replay-prob-bars" class="replay-prob-bars"></div></div>
+          <div class="panel replay-margin-panel"><div class="section-head"><div><span class="eyebrow">FINAL MARGIN DISTRIBUTION</span><h2>Where does the game finish?</h2></div></div><div id="replay-margin-dist" class="replay-margin-dist"></div></div>
+        </div>
+      </section>
     </main>
   </div>
 </div>
