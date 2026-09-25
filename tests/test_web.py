@@ -33,3 +33,18 @@ def test_recent_games_and_historical_flip_api():
     data = r.json()
     assert data['intervention']['kind'] == 'flip_game'
     assert data['intervention']['original_winner'] != data['intervention']['flipped_winner']
+
+
+def test_timeline_and_diagnostics_endpoints():
+    timeline = client.get('/api/timeline/NYK')
+    assert timeline.status_code == 200
+    payload = timeline.json()
+    assert payload['points']
+    assert payload['summary']['games'] == len(payload['points'])
+
+    diagnostics = client.get('/api/diagnostics')
+    assert diagnostics.status_code == 200
+    data = diagnostics.json()
+    assert data['metrics']['games'] > 0
+    assert data['calibration']
+    assert data['model']['name'] == 'Frozen Elo baseline'
