@@ -48,3 +48,14 @@ def test_timeline_and_diagnostics_endpoints():
     assert data['metrics']['games'] > 0
     assert data['calibration']
     assert data['model']['name'] == 'Frozen Elo baseline'
+
+
+def test_matchup_api_simulates_series():
+    r = client.post('/api/matchup', json={
+        'as_of': '2026-01-15', 'trials': 200, 'seed': 7,
+        'team_a': 'NYK', 'team_b': 'BOS', 'best_of': 7
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert abs(data['team_a_series_probability'] + data['team_b_series_probability'] - 1) < 1e-9
+    assert 4 <= data['expected_games'] <= 7
