@@ -21,6 +21,8 @@ from .diagnostics import calibration_curve
 from .matchup import simulate_matchup
 from .impact import fit_rapm
 from .impact_source import load_impact_snapshot
+from .lineup import compare_lineups
+from .leverage import rank_upcoming_games
 from .demo_impact import synthetic_impact_snapshot
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
@@ -114,6 +116,13 @@ class AwardSimRequest(BaseModel):
     as_of: date
     trials: int = Field(default=1000, ge=100, le=5000)
     seed: int = 2026
+
+
+class LineupCompareRequest(BaseModel):
+    lineup_a: list[str]
+    lineup_b: list[str]
+    alpha: float = Field(default=1000.0, gt=0, le=10000)
+    prior_possessions: float = Field(default=300.0, gt=0, le=5000)
 
 
 def _serialize(result):
@@ -375,6 +384,70 @@ def impact_path(player_id: str):
             points.append({"alpha": alpha, "impact_per_100": row.impact_per_100, "rank": row.rank})
     meta = IMPACT_SNAPSHOT.players[player_id]
     return {"player": asdict(meta), "points": points, "source": IMPACT_SOURCE}
+
+
+@app.get("/api/lineup/players")
+def lineup_players(alpha: float = 1000.0):
+    result = _impact_result(float(alpha))
+    impact_by_id = {row.player_id: row for row in result.players}
+    rows = []
+    for player_id, meta in IMPACT_SNAPSHOT.players.items():
+        impact = impact_by_id.get(player_id)
+        if impact is None:
+            continue
+        rows.append({
+            "player_id": player_id,
+            "player_name": meta.player_name,
+            "team": meta.team,
+            "impact_per_100": impact.impact_per_100,
+            "possessions": impact.possessions,
+            "rank": impact.rank,
+        })
+    rows.sort(key=lambda row: (row["team"], row["player_name"]))
+    return {"source": IMPACT_SOURCE, "players": rows}
+
+
+@app.post("/api/lineup/compare")
+def lineup_compare(request: LineupCompareRequest):
+    try:
+        result = compare_lineups(
+            IMPACT_SNAPSHOT,
+            _impact_result(float(request.alpha)),
+            tuple(request.lineup_a),
+            tuple(request.lineup_b),
+            prior_possessions=request.prior_possessions,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    def serialize_lineup(lineup):
+        return {
+            **asdict(lineup),
+            "player_meta": [asdict(IMPACT_SNAPSHOT.players[player_id]) for player_id in lineup.players],
+        }
+
+    return {
+        "source": IMPACT_SOURCE,
+        "alpha": request.alpha,
+        "prior_possessions": request.prior_possessions,
+        "lineup_a": serialize_lineup(result.lineup_a),
+        "lineup_b": serialize_lineup(result.lineup_b),
+        "neutral_margin_per_100": result.neutral_margin_per_100,
+        "warning": "Lineup estimates are regularized model expectations, not observed causal effects.",
+    }
+
+
+@app.get("/api/leverage")
+def leverage(as_of: date, trials: int = 500, limit: int = 10):
+    trials = max(100, min(trials, 5000))
+    limit = max(1, min(limit, 20))
+    rows = rank_upcoming_games(GAMES, as_of, trials=trials, seed=2026, limit=limit)
+    return {
+        "as_of": as_of.isoformat(),
+        "trials_per_world": trials,
+        "games": [asdict(row) for row in rows],
+        "definition": "For each game, force each possible winner in paired season simulations and measure the resulting league-wide distribution shift.",
+    }
 
 
 @app.get("/api/timeline/{team}")

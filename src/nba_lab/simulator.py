@@ -104,6 +104,7 @@ def simulate_remaining_season(
     trials: int = 10_000,
     seed: int = 2026,
     rating_adjustments: dict[str, float] | None = None,
+    forced_winners: dict[str, str] | None = None,
     model: EloModel | None = None,
 ) -> SimulationResult:
     if trials < 1:
@@ -111,6 +112,7 @@ def simulate_remaining_season(
     model = model or EloModel()
     ratings = model.fit_as_of(games, as_of)
     adjustments = rating_adjustments or {}
+    forced = forced_winners or {}
     ratings = {team: rating + adjustments.get(team, 0.0) for team, rating in ratings.items()}
     teams = sorted(ratings)
     observed_wins, observed_losses = _observed_records(games, as_of)
@@ -126,7 +128,13 @@ def simulate_remaining_season(
     for _ in range(trials):
         wins = {team: observed_wins[team] for team in teams}
         for game in future:
-            winner = _single_game(game.home_team, game.away_team, ratings, model, rng)
+            if game.game_id in forced:
+                rng.random()  # preserve paired random stream versus unconstrained worlds
+                winner = forced[game.game_id]
+                if winner not in {game.home_team, game.away_team}:
+                    raise ValueError(f"forced winner {winner} is not in game {game.game_id}")
+            else:
+                winner = _single_game(game.home_team, game.away_team, ratings, model, rng)
             wins[winner] += 1
 
         orders = _seed_groups(teams, wins, rng)
