@@ -60,3 +60,29 @@ def sync_awards():
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
     print(f"Wrote {len(content):,} bytes to {target} from NBA PlayerGameLogs season={args.season}")
+
+
+def sync_impact():
+    """Build normalized RAPM observations from pbpstats possessions."""
+    parser = argparse.ArgumentParser(prog="nba-lab-sync-impact")
+    parser.add_argument("--schedule", default="data/scheduleLeagueV2.json")
+    parser.add_argument("--output", default="data/impact_stints.json")
+    parser.add_argument("--pbp-dir", default="data/pbpstats")
+    parser.add_argument("--source", choices=["file", "web"], default="file")
+    parser.add_argument("--max-games", type=int)
+    args = parser.parse_args()
+
+    from .impact_sync import build_impact_snapshot
+
+    payload = build_impact_snapshot(
+        schedule_path=args.schedule,
+        output_path=args.output,
+        pbp_dir=args.pbp_dir,
+        source=args.source,
+        max_games=args.max_games,
+    )
+    qa = payload.get("qa", {})
+    print(
+        f"Wrote {len(payload['stints']):,} impact observations to {args.output}; "
+        f"kept {qa.get('possessions_kept', 0):,} / {qa.get('possessions_seen', 0):,} possessions"
+    )
