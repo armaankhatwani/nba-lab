@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import date
 
-from .analysis import TeamDelta
+from .analysis import TeamDelta, build_team_deltas
 from .domain import Game
 from .simulator import SimulationResult, simulate_remaining_season
 
@@ -53,18 +53,7 @@ def compare_game_flip(
         raise ValueError("the flipped game must occur before the as-of date")
     baseline = simulate_remaining_season(games, as_of, trials=trials, seed=seed)
     altered = simulate_remaining_season(altered_games, as_of, trials=trials, seed=seed)
-    left = {x.team: x for x in baseline.teams}
-    right = {x.team: x for x in altered.teams}
-    deltas = tuple(
-        TeamDelta(
-            team=team,
-            expected_wins_delta=right[team].expected_wins - left[team].expected_wins,
-            first_seed_probability_delta=(
-                right[team].first_seed_probability - left[team].first_seed_probability
-            ),
-        )
-        for team in sorted(left)
-    )
+    deltas = build_team_deltas(baseline, altered)
     flipped = next(g for g in altered_games if g.game_id == game_id)
     return GameFlipComparison(
         game_id=game_id,
