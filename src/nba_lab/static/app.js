@@ -1,9 +1,9 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[];
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
-const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['NBA LAB / SEASON LAB','Rewrite the season.'],matchup:['NBA LAB / MATCHUP LAB','Run the matchup.'],timeline:['NBA LAB / TIMELINE LAB','Replay how a team changed.'],model:['NBA LAB / MODEL LAB','Trust the model, then improve it.'],awards:['NBA LAB / AWARDS LAB','Replay the award race.'],impact:['NBA LAB / PLAYER IMPACT','Separate player from context.'],lineup:['NBA LAB / LINEUP LAB','Build the five.'],leverage:['NBA LAB / LEVERAGE LAB','Find the pivotal game.'],game:['NBA LAB / GAME REPLAY','Rewrite the possession.']};
-function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards();if(name==='impact')loadImpact();if(name==='lineup')loadLineup()}
+const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['NBA LAB / SEASON LAB','Rewrite the season.'],matchup:['NBA LAB / MATCHUP LAB','Run the matchup.'],timeline:['NBA LAB / TIMELINE LAB','Replay how a team changed.'],model:['NBA LAB / MODEL LAB','Trust the model, then improve it.'],awards:['NBA LAB / AWARDS LAB','Replay the award race.'],impact:['NBA LAB / PLAYER IMPACT','Separate player from context.'],lineup:['NBA LAB / LINEUP LAB','Build the five.'],leverage:['NBA LAB / LEVERAGE LAB','Find the pivotal game.'],game:['NBA LAB / GAME REPLAY','Replay the game.']};
+function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards();if(name==='impact')loadImpact();if(name==='lineup')loadLineup();if(name==='game')loadReplay()}
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>openView(b.dataset.view));document.querySelectorAll('[data-open]').forEach(c=>c.onclick=()=>openView(c.dataset.open));
 async function loadGames(){const team=$('game-team').value;const q=new URLSearchParams({before:$('asof').value,limit:'50'});if(team)q.set('team',team);const games=await json('/api/games?'+q);$('game').replaceChildren();games.forEach(g=>{const o=document.createElement('option');o.value=g.game_id;o.textContent=`${g.date} · ${g.away_team} ${g.away_score} @ ${g.home_team} ${g.home_score}`;$('game').append(o)});if(!games.length){const o=document.createElement('option');o.textContent='No completed games before this date';$('game').append(o)}}
 async function init(){meta=await json('/api/status');const official=meta.source.kind==='official_snapshot';$('source-short').textContent=official?'Official NBA snapshot':'Synthetic fallback';$('source-detail').textContent=`${meta.games} games · ${meta.teams} teams`;$('source-dot').style.background=official?'var(--green)':'var(--orange)';$('date-range').textContent=`${meta.date_min} → ${meta.date_max}`;teamOptions($('team'));teamOptions($('game-team'),true);teamOptions($('timeline-team'));teamOptions($('matchup-a'));teamOptions($('matchup-b'));$('team').value='NYK';$('timeline-team').value='NYK';$('matchup-a').value='NYK';$('matchup-b').value='BOS';await loadGames();try{const b=await json('/api/backtest');$('brier').textContent=b.brier.toFixed(3)}catch(e){$('brier').textContent='—'}}
@@ -73,6 +73,116 @@ $('leverage-run').onclick=async()=>{
     $('lev-status').textContent=e.message;
   }finally{button.disabled=false}
 };
+
+
+async function loadReplay(){
+  if(!replayGames.length){
+    const listing=await json('/api/replay/games');
+    replayGames=listing.games||[];
+    $('replay-source').textContent=listing.source?.kind==='official_snapshot'?'OFFICIAL PBP SNAPSHOTS':'SYNTHETIC REPLAY FALLBACK';
+    $('replay-game').replaceChildren();
+    replayGames.forEach(game=>{
+      const option=document.createElement('option');
+      option.value=game.game_id;
+      option.textContent=`${game.date} · ${game.away_team} ${game.away_score} @ ${game.home_team} ${game.home_score}`;
+      $('replay-game').append(option);
+    });
+  }
+  if(!replayGames.length){
+    $('replay-event-description').textContent='No replay snapshots are available.';
+    return;
+  }
+  if(!replayData||replayData.game.game_id!==$('replay-game').value)await loadReplayGame();
+}
+async function loadReplayGame(){
+  const gameId=$('replay-game').value;if(!gameId)return;
+  replayData=await json(`/api/replay/${gameId}`);
+  const events=replayData.events||[];
+  replayIndex=Math.max(0,Math.min(events.length-1,Math.floor(events.length*.72)));
+  $('replay-slider').min=0;$('replay-slider').max=Math.max(0,events.length-1);$('replay-slider').value=replayIndex;
+  $('replay-away-team').textContent=replayData.game.away_team;$('replay-home-team').textContent=replayData.game.home_team;
+  $('replay-edit-home-label').textContent=replayData.game.home_team;$('replay-edit-away-label').textContent=replayData.game.away_team;
+  $('replay-home-delta').value=0;$('replay-away-delta').value=0;
+  renderReplayEvent();
+}
+function replayClock(seconds){
+  const s=Math.max(0,Math.round(seconds));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+function replayPeriod(period){return period<=4?`Q${period}`:`OT${period-4}`}
+function clearReplayResults(){
+  ['replay-base-prob','replay-alt-prob','replay-prob-delta','replay-margin'].forEach(id=>$(id).textContent='—');
+  $('replay-run-note').textContent='run a simulation';$('replay-prob-bars').innerHTML='';$('replay-margin-dist').innerHTML='';
+}
+function renderReplayEvent(){
+  if(!replayData?.events?.length)return;
+  replayIndex=Math.max(0,Math.min(replayData.events.length-1,replayIndex));
+  const event=replayData.events[replayIndex];
+  $('replay-slider').value=replayIndex;
+  $('replay-away-score').textContent=event.away_score;$('replay-home-score').textContent=event.home_score;
+  $('replay-period').textContent=replayPeriod(event.period);$('replay-clock').textContent=replayClock(event.clock_seconds);
+  $('replay-event-number').textContent=`event ${event.action_number}`;
+  $('replay-event-team').textContent=event.team||'GAME STATE';
+  $('replay-event-description').textContent=event.description||'No description';
+  $('replay-event-type').textContent=[event.action_type,event.sub_type].filter(Boolean).join(' · ');
+  $('replay-slider-label').textContent=`${replayIndex+1} / ${replayData.events.length}`;
+  const lo=Math.max(0,replayIndex-3),hi=Math.min(replayData.events.length,replayIndex+4);
+  $('replay-nearby-events').innerHTML=replayData.events.slice(lo,hi).map((row,offset)=>{
+    const idx=lo+offset;
+    return `<div class="replay-nearby-row ${idx===replayIndex?'active':''}" data-replay-index="${idx}">
+      <span>${replayPeriod(row.period)} ${replayClock(row.clock_seconds)}</span>
+      <span>${row.away_score}-${row.home_score}</span>
+      <strong>${row.description||row.action_type||'game event'}</strong>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('[data-replay-index]').forEach(row=>row.onclick=()=>{replayIndex=Number(row.dataset.replayIndex);renderReplayEvent();clearReplayResults()});
+}
+$('replay-game').onchange=loadReplayGame;
+$('replay-slider').oninput=()=>{replayIndex=Number($('replay-slider').value);renderReplayEvent();clearReplayResults()};
+document.querySelectorAll('[data-replay-preset]').forEach(button=>button.onclick=()=>{
+  const preset=button.dataset.replayPreset;
+  $('replay-home-delta').value=preset==='home2'?2:preset==='home3'?3:0;
+  $('replay-away-delta').value=preset==='away2'?2:preset==='away3'?3:0;
+  clearReplayResults();
+});
+$('replay-home-delta').oninput=clearReplayResults;$('replay-away-delta').oninput=clearReplayResults;
+$('replay-run').onclick=async()=>{
+  if(!replayData?.events?.length)return;
+  const event=replayData.events[replayIndex],button=$('replay-run');button.disabled=true;
+  try{
+    const d=await json('/api/replay/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      game_id:replayData.game.game_id,
+      action_number:event.action_number,
+      trials:Number($('replay-trials').value),
+      seed:2026,
+      home_score_delta:Number($('replay-home-delta').value||0),
+      away_score_delta:Number($('replay-away-delta').value||0)
+    })});
+    renderReplayResult(d);
+  }catch(e){$('replay-run-note').textContent=e.message}finally{button.disabled=false}
+};
+function renderReplayResult(d){
+  const b=d.baseline,a=d.altered,delta=d.home_win_probability_delta;
+  $('replay-base-prob').textContent=pct(b.home_win_probability);
+  $('replay-alt-prob').textContent=pct(a.home_win_probability);
+  $('replay-prob-delta').textContent=`${delta>=0?'+':''}${(100*delta).toFixed(1)} pts`;
+  $('replay-prob-delta').className=delta>=0?'replay-swing-positive':'replay-swing-negative';
+  $('replay-margin').textContent=`${a.expected_final_margin>=0?'+':''}${a.expected_final_margin.toFixed(1)}`;
+  $('replay-run-note').textContent=`${a.trials.toLocaleString()} paired futures · pregame home ${pct(a.pregame_home_win_probability)}`;
+  $('replay-prob-bars').innerHTML=`
+    <div class="prob-compare-row"><span>BASELINE</span><div class="prob-compare-track"><div class="prob-compare-fill base" style="width:${100*b.home_win_probability}%"></div></div><strong>${pct(b.home_win_probability)}</strong></div>
+    <div class="prob-compare-row"><span>ALTERED</span><div class="prob-compare-track"><div class="prob-compare-fill alt" style="width:${100*a.home_win_probability}%"></div></div><strong>${pct(a.home_win_probability)}</strong></div>`;
+  const values=[a.p10_final_margin,a.p50_final_margin,a.p90_final_margin,0];
+  const min=Math.floor(Math.min(...values)-2),max=Math.ceil(Math.max(...values)+2),span=Math.max(1,max-min);
+  const pos=v=>100*(v-min)/span;
+  $('replay-margin-dist').innerHTML=`
+    <div class="margin-axis">
+      <div class="margin-range" style="left:${pos(a.p10_final_margin)}%;width:${pos(a.p90_final_margin)-pos(a.p10_final_margin)}%"></div>
+      <div class="margin-zero" style="left:${pos(0)}%"></div>
+      <div class="margin-median" style="left:${pos(a.p50_final_margin)}%"></div>
+    </div>
+    <div class="margin-labels"><span>${min}</span><span>home margin</span><span>+${max}</span></div>
+    <div class="margin-summary"><div><span>P10</span><strong>${a.p10_final_margin.toFixed(1)}</strong></div><div><span>MEDIAN</span><strong>${a.p50_final_margin.toFixed(1)}</strong></div><div><span>P90</span><strong>${a.p90_final_margin.toFixed(1)}</strong></div></div>`;
+}
 
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
