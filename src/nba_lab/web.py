@@ -13,6 +13,7 @@ from .backtest import chronological_backtest
 from .branch import compare_game_flip
 from .demo import synthetic_demo_games
 from .diagnostics import calibration_curve
+from .matchup import simulate_matchup
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
 from .teams import TEAMS
@@ -51,6 +52,12 @@ class CompareRequest(SimRequest):
 
 class FlipRequest(SimRequest):
     game_id: str
+
+
+class MatchupRequest(SimRequest):
+    team_a: str
+    team_b: str
+    best_of: int = 7
 
 
 def _serialize(result):
@@ -159,6 +166,23 @@ def flip_game_result(request: FlipRequest):
             "label": "historical result branch",
         },
     }
+
+
+@app.post("/api/matchup")
+def matchup(request: MatchupRequest):
+    try:
+        result = simulate_matchup(
+            GAMES,
+            request.team_a,
+            request.team_b,
+            request.as_of,
+            trials=request.trials,
+            best_of=request.best_of,
+            seed=request.seed,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return asdict(result)
 
 
 @app.get("/api/timeline/{team}")
