@@ -1,9 +1,9 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null;
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
 const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['NBA LAB / SEASON LAB','Rewrite the season.'],matchup:['NBA LAB / MATCHUP LAB','Run the matchup.'],timeline:['NBA LAB / TIMELINE LAB','Replay how a team changed.'],model:['NBA LAB / MODEL LAB','Trust the model, then improve it.'],awards:['NBA LAB / AWARDS LAB','Replay the award race.'],impact:['NBA LAB / PLAYER IMPACT','Separate player from context.'],lineup:['NBA LAB / LINEUP LAB','Build the five.'],game:['NBA LAB / GAME REPLAY','Rewrite the possession.']};
-function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards()}
+function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards();if(name==='impact')loadImpact()}
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>openView(b.dataset.view));document.querySelectorAll('[data-open]').forEach(c=>c.onclick=()=>openView(c.dataset.open));
 async function loadGames(){const team=$('game-team').value;const q=new URLSearchParams({before:$('asof').value,limit:'50'});if(team)q.set('team',team);const games=await json('/api/games?'+q);$('game').replaceChildren();games.forEach(g=>{const o=document.createElement('option');o.value=g.game_id;o.textContent=`${g.date} · ${g.away_team} ${g.away_score} @ ${g.home_team} ${g.home_score}`;$('game').append(o)});if(!games.length){const o=document.createElement('option');o.textContent='No completed games before this date';$('game').append(o)}}
 async function init(){meta=await json('/api/status');const official=meta.source.kind==='official_snapshot';$('source-short').textContent=official?'Official NBA snapshot':'Synthetic fallback';$('source-detail').textContent=`${meta.games} games · ${meta.teams} teams`;$('source-dot').style.background=official?'var(--green)':'var(--orange)';$('date-range').textContent=`${meta.date_min} → ${meta.date_max}`;teamOptions($('team'));teamOptions($('game-team'),true);teamOptions($('timeline-team'));teamOptions($('matchup-a'));teamOptions($('matchup-b'));$('team').value='NYK';$('timeline-team').value='NYK';$('matchup-a').value='NYK';$('matchup-b').value='BOS';await loadGames();try{const b=await json('/api/backtest');$('brier').textContent=b.brier.toFixed(3)}catch(e){$('brier').textContent='—'}}
@@ -39,6 +39,53 @@ async function loadTimeline(){const team=$('timeline-team').value||'NYK';const d
 function drawTimeline(points){const el=$('timeline-chart');if(!points.length){el.innerHTML='';return}const W=900,H=250,pad=34;const vals=points.map(p=>p.rating);const min=Math.min(...vals)-15,max=Math.max(...vals)+15;const x=i=>pad+(W-2*pad)*(i/Math.max(1,points.length-1));const y=v=>H-pad-(H-2*pad)*((v-min)/(max-min));const path=points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.rating).toFixed(1)}`).join(' ');const grids=[min,(min+max)/2,max];el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grids.map(v=>`<line class="grid" x1="${pad}" y1="${y(v)}" x2="${W-pad}" y2="${y(v)}"/><text x="2" y="${y(v)+3}">${v.toFixed(0)}</text>`).join('')}<path class="line" d="${path}"/>${points.map((p,i)=>`<circle class="point ${p.win?'win':'loss'}" cx="${x(i)}" cy="${y(p.rating)}" r="4"><title>${p.date} · ${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin} vs ${p.opponent} · Elo ${p.rating}</title></circle>`).join('')}</svg>`}
 async function loadDiagnostics(){if(diagnosticsLoaded)return;const d=await json('/api/diagnostics');diagnosticsLoaded=true;$('md-brier').textContent=d.metrics.brier.toFixed(3);$('md-logloss').textContent=d.metrics.log_loss.toFixed(3);$('md-accuracy').textContent=pct(d.metrics.accuracy);$('md-games').textContent=d.metrics.games.toLocaleString();$('model-name').textContent=d.model.name;$('model-base').textContent=d.model.base;$('model-k').textContent=d.model.k;$('model-home').textContent=`${d.model.home_advantage} Elo`;$('promotion-rule').textContent=d.model.promotion_rule;drawCalibration(d.calibration)}
 function drawCalibration(points){const el=$('calibration-chart'),W=600,H=250,pad=34;const x=v=>pad+(W-2*pad)*v,y=v=>H-pad-(H-2*pad)*v;const path=points.map((p,i)=>`${i?'L':'M'}${x(p.mean_prediction)},${y(p.actual_rate)}`).join(' ');el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="grid" x1="${pad}" y1="${y(.5)}" x2="${W-pad}" y2="${y(.5)}"/><line class="grid" x1="${x(.5)}" y1="${pad}" x2="${x(.5)}" y2="${H-pad}"/><line class="ideal" x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}"/><path class="cal-line" d="${path}"/>${points.map(p=>`<circle class="point win" cx="${x(p.mean_prediction)}" cy="${y(p.actual_rate)}" r="${Math.max(4,Math.min(9,Math.sqrt(p.count)))}"><title>${(p.mean_prediction*100).toFixed(1)}% predicted · ${(p.actual_rate*100).toFixed(1)}% observed · n=${p.count}</title></circle>`).join('')}<text x="${pad}" y="${H-6}">0%</text><text x="${W-pad-18}" y="${H-6}">100%</text><text x="4" y="${pad+3}">100%</text><text x="4" y="${H-pad+3}">0%</text></svg>`}
+
+
+async function loadImpact(){
+  const alpha=Number($('impact-alpha').value||1000);
+  const d=await json(`/api/impact?alpha=${alpha}&limit=500`);
+  impactData=d;
+  $('impact-stints').textContent=d.stints.toLocaleString();
+  $('impact-games').textContent=d.games.toLocaleString();
+  $('impact-home').textContent=d.home_court_per_100.toFixed(2);
+  $('impact-rmse').textContent=d.weighted_rmse.toFixed(2);
+  $('impact-source').textContent=d.source?.kind==='normalized_snapshot'?'NORMALIZED REAL STINTS':'SYNTHETIC STINTS';
+  renderImpactRows(d.players);
+  drawImpactScatter(d.players);
+  if(d.players[0])loadImpactPath(d.players[0].player_id);
+}
+function renderImpactRows(rows){
+  const q=($('impact-search').value||'').trim().toLowerCase();
+  const filtered=rows.filter(p=>!q||p.player_name.toLowerCase().includes(q)||p.team.toLowerCase().includes(q));
+  $('impact-rows').innerHTML=filtered.map((p,i)=>`<tr data-impact-player="${p.player_id}">
+    <td>${p.rank}</td><td>${p.player_name}</td><td>${p.team}</td>
+    <td class="${p.impact_per_100>=0?'impact-positive':'impact-negative'}">${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(2)}</td>
+    <td>${Math.round(p.possessions).toLocaleString()}</td>
+  </tr>`).join('');
+  document.querySelectorAll('[data-impact-player]').forEach(row=>row.onclick=()=>{document.querySelectorAll('[data-impact-player]').forEach(x=>x.classList.remove('active'));row.classList.add('active');loadImpactPath(row.dataset.impactPlayer)});
+}
+$('impact-alpha').onchange=loadImpact;
+$('impact-search').oninput=()=>impactData&&renderImpactRows(impactData.players);
+async function loadImpactPath(playerId){
+  const d=await json(`/api/impact/${playerId}/path`);
+  $('impact-detail-name').textContent=`${d.player.player_name} · ${d.player.team}`;
+  const current=impactData?.players.find(p=>p.player_id===playerId);
+  $('impact-detail-meta').textContent=current?`Current α ${impactData.alpha.toFixed(0)} · RAPM ${current.impact_per_100>=0?'+':''}${current.impact_per_100.toFixed(2)} / 100 · ${Math.round(current.possessions).toLocaleString()} possessions`:'Regularization path';
+  drawImpactPath(d.points);
+}
+function drawImpactPath(points){
+  const el=$('impact-path-chart');if(!points.length){el.innerHTML='';return}
+  const W=430,H=220,pad=34;const vals=points.map(p=>p.impact_per_100);const min=Math.min(...vals,0)-.5,max=Math.max(...vals,0)+.5;
+  const x=i=>pad+(W-2*pad)*(i/Math.max(1,points.length-1));const y=v=>H-pad-(H-2*pad)*((v-min)/Math.max(.01,max-min));
+  const path=points.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p.impact_per_100)}`).join(' ');
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="grid" x1="${pad}" y1="${y(0)}" x2="${W-pad}" y2="${y(0)}"/><path class="path-line" d="${path}"/>${points.map((p,i)=>`<circle class="path-dot" cx="${x(i)}" cy="${y(p.impact_per_100)}" r="5"><title>α ${p.alpha} · ${p.impact_per_100.toFixed(2)} · rank ${p.rank}</title></circle><text x="${x(i)-10}" y="${H-8}">${p.alpha}</text>`).join('')}<text x="3" y="${y(max)+4}">${max.toFixed(1)}</text><text x="3" y="${y(min)+4}">${min.toFixed(1)}</text></svg>`;
+}
+function drawImpactScatter(players){
+  const el=$('impact-scatter');if(!players.length){el.innerHTML='';return}
+  const W=900,H=300,pad=42;const xs=players.map(p=>p.possessions),ys=players.map(p=>p.impact_per_100);const maxX=Math.max(...xs),minY=Math.min(...ys)-.5,maxY=Math.max(...ys)+.5;
+  const x=v=>pad+(W-2*pad)*(v/Math.max(1,maxX));const y=v=>H-pad-(H-2*pad)*((v-minY)/Math.max(.01,maxY-minY));const exposureCut=maxX*.25;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="zero" x1="${pad}" y1="${y(0)}" x2="${W-pad}" y2="${y(0)}"/><line class="grid" x1="${x(exposureCut)}" y1="${pad}" x2="${x(exposureCut)}" y2="${H-pad}"/>${players.map(p=>`<circle class="scatter-point ${p.possessions<exposureCut?'low-sample':''}" cx="${x(p.possessions)}" cy="${y(p.impact_per_100)}" r="5"><title>${p.player_name} · ${p.team} · RAPM ${p.impact_per_100.toFixed(2)} · ${Math.round(p.possessions)} poss</title></circle>`).join('')}<text x="${pad}" y="${H-8}">0 poss</text><text x="${W-pad-50}" y="${H-8}">${Math.round(maxX)} poss</text><text x="3" y="${y(maxY)+3}">${maxY.toFixed(1)}</text><text x="3" y="${y(minY)+3}">${minY.toFixed(1)}</text></svg>`;
+}
 
 async function loadAwards(){
   if(!awardHistory.length){
