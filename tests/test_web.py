@@ -84,3 +84,15 @@ def test_awards_simulation_api_returns_distribution():
     data = r.json()
     assert data['candidates']
     assert abs(sum(c['leader_probability'] for c in data['candidates']) - 1) < 1e-9
+
+
+def test_player_impact_and_regularization_path_api():
+    impact = client.get('/api/impact?alpha=1000&limit=20')
+    assert impact.status_code == 200
+    data = impact.json()
+    assert data['players']
+    player_id = data['players'][0]['player_id']
+    path = client.get(f'/api/impact/{player_id}/path')
+    assert path.status_code == 200
+    points = path.json()['points']
+    assert [p['alpha'] for p in points] == [100.0, 300.0, 1000.0, 3000.0]
