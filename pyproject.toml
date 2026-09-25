@@ -11,12 +11,14 @@ dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "pydantic>=2.10,<3", "n
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
-data = ["nba_api>=1.10,<2"]\nimpact = ["pbpstats>=1.3.11,<2"]
+data = ["nba_api>=1.10,<2"]
+impact = ["pbpstats>=1.3.11,<2"]
 
 [project.scripts]
 nba-lab = "nba_lab.cli:main"
 nba-lab-sync = "nba_lab.cli:sync"
-nba-lab-sync-awards = "nba_lab.cli:sync_awards"\nnba-lab-sync-impact = "nba_lab.cli:sync_impact"
+nba-lab-sync-awards = "nba_lab.cli:sync_awards"
+nba-lab-sync-impact = "nba_lab.cli:sync_impact"
 
 [tool.setuptools.packages.find]
 where = ["src"]
