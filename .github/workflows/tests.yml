@@ -20,4 +20,5 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
+      - run: node --check src/nba_lab/static/app.js
       - run: pytest -q
