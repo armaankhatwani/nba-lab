@@ -121,3 +121,30 @@ def test_leverage_api_ranks_upcoming_games():
     data = r.json()
     assert len(data['games']) == 3
     assert data['games'][0]['title_distribution_shift'] >= data['games'][-1]['title_distribution_shift']
+
+
+def test_game_replay_endpoints_and_intervention():
+    listing = client.get('/api/replay/games')
+    assert listing.status_code == 200
+    games = listing.json()['games']
+    assert games
+    game_id = games[0]['game_id']
+
+    replay = client.get(f'/api/replay/{game_id}')
+    assert replay.status_code == 200
+    payload = replay.json()
+    assert payload['events']
+    event = payload['events'][len(payload['events']) // 2]
+
+    result = client.post('/api/replay/simulate', json={
+        'game_id': game_id,
+        'action_number': event['action_number'],
+        'trials': 500,
+        'seed': 7,
+        'home_score_delta': 3,
+        'away_score_delta': 0,
+    })
+    assert result.status_code == 200
+    data = result.json()
+    assert data['home_win_probability_delta'] >= 0
+    assert abs(data['expected_final_margin_delta'] - 3) < 1e-9
