@@ -77,12 +77,15 @@
       <section class="view" id="view-awards">
         <div class="awards-toolbar panel">
           <div><span class="eyebrow">MVP / POINT-IN-TIME BASELINE</span><h2>Replay the race.</h2><p>Every ranking uses only player and team results available through the selected date.</p></div>
-          <div class="award-date-box"><label>Race date<input id="award-date" type="date" value="2026-01-15"></label><div class="award-slider-row"><input id="award-slider" type="range" min="0" max="100" value="55"><span id="award-source">Loading…</span></div></div>
+          <div class="award-date-box"><label>Race date<input id="award-date" type="date" value="2026-01-15"></label><div class="award-slider-row"><input id="award-slider" type="range" min="0" max="100" value="55"><span id="award-source">Loading…</span></div>
+            <div class="award-sim-row"><select id="award-sim-trials"><option>500</option><option selected>1000</option><option>2500</option><option>5000</option></select><button class="primary" id="award-simulate">SIMULATE REST OF SEASON ↗</button></div>
+          </div>
         </div>
         <div class="award-grid">
           <div class="panel race-board"><div class="section-head"><div><span class="eyebrow">CURRENT BOARD</span><h2 id="award-board-title">MVP race</h2></div><span id="award-date-label"></span></div><div id="award-board" class="award-board"></div></div>
           <div class="panel award-detail"><span class="eyebrow">WHY THE MODEL LIKES HIM</span><h2 id="award-detail-name">Select a candidate</h2><div id="award-detail-meta" class="award-detail-meta"></div><div id="award-features" class="award-features"></div><p class="note">Race share is a normalized baseline score, not a calibrated probability of winning MVP.</p></div>
         </div>
+        <div class="panel award-futures"><div class="section-head"><div><span class="eyebrow">SIMULATED FINISH</span><h2>Who ends up leading?</h2></div><span id="award-future-note">run remaining-season simulation</span></div><div id="award-future-bars" class="award-future-bars empty"><span>Simulate alternate season endings to connect the award race to team and player futures.</span></div></div>
         <div class="panel award-history"><div class="section-head"><div><span class="eyebrow">RACE HISTORY</span><h2>Who led, and when?</h2></div><span>weekly snapshots · hover points for score</span></div><div id="award-history-chart" class="chart awards-chart"></div></div>
       </section>
       <section class="view future-view" id="view-impact"><span class="eyebrow">NEXT MODULE</span><h2>Player Impact</h2><p>Possession/stint data → regularized adjusted plus-minus → uncertainty → player-aware season counterfactuals.</p></section>
