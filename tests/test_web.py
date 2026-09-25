@@ -113,3 +113,11 @@ def test_lineup_players_and_compare_api():
     assert len(data['lineup_a']['player_meta']) == 5
     assert len(data['lineup_b']['player_meta']) == 5
     assert isinstance(data['neutral_margin_per_100'], float)
+
+
+def test_leverage_api_ranks_upcoming_games():
+    r = client.get('/api/leverage?as_of=2026-01-15&trials=100&limit=3')
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data['games']) == 3
+    assert data['games'][0]['title_distribution_shift'] >= data['games'][-1]['title_distribution_shift']
