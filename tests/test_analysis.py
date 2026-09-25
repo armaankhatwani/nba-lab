@@ -34,3 +34,10 @@ def test_backtest_metrics_are_bounded():
     assert 0 <= result.brier <= 1
     assert result.log_loss >= 0
     assert 0 <= result.accuracy <= 1
+
+
+def test_counterfactual_exposes_postseason_probability_deltas():
+    result = compare_counterfactual(games(), date(2026, 1, 3), {"A": 200}, trials=500, seed=21)
+    delta = {x.team: x for x in result.deltas}["A"]
+    assert hasattr(delta, "playoffs_probability_delta")
+    assert hasattr(delta, "championship_probability_delta")
