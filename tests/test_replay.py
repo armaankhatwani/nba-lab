@@ -20,7 +20,7 @@ def event(period=4, clock=120, home=100, away=100):
 
 def test_total_seconds_remaining_across_regulation():
     assert total_seconds_remaining(1, 720) == 2880
-    assert total_seconds_remaining(2, 360) == 1080
+    assert total_seconds_remaining(2, 360) == 1800
     assert total_seconds_remaining(4, 30) == 30
 
 
