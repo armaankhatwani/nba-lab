@@ -59,3 +59,17 @@ def test_matchup_api_simulates_series():
     data = r.json()
     assert abs(data['team_a_series_probability'] + data['team_b_series_probability'] - 1) < 1e-9
     assert 4 <= data['expected_games'] <= 7
+
+
+def test_awards_race_and_history_api():
+    race = client.get('/api/awards/race?as_of=2026-01-15&limit=5')
+    assert race.status_code == 200
+    data = race.json()
+    assert data['award'] == 'MVP'
+    assert len(data['candidates']) <= 5
+    if data['candidates']:
+        assert abs(sum(c['race_share'] for c in client.get('/api/awards/race?as_of=2026-01-15&limit=25').json()['candidates']) - 1) < 1e-9
+
+    history = client.get('/api/awards/history?step_days=14&limit=4')
+    assert history.status_code == 200
+    assert history.json()['snapshots']
