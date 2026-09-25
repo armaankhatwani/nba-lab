@@ -148,3 +148,5 @@ def test_game_replay_endpoints_and_intervention():
     data = result.json()
     assert data['home_win_probability_delta'] >= 0
     assert abs(data['expected_final_margin_delta'] - 3) < 1e-9
+    assert 'season_ripple' in data
+    assert data['season_ripple']['teams']
