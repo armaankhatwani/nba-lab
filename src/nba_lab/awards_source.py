@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
+from pathlib import Path
 from typing import Any
 
 from .awards import PlayerGame
@@ -40,3 +42,7 @@ def parse_player_game_logs(payload: dict[str, Any]) -> list[PlayerGame]:
         ))
     result.sort(key=lambda x:(x.game_date,x.game_id,x.player_id))
     return result
+
+
+def load_player_logs(path: str | Path) -> list[PlayerGame]:
+    return parse_player_game_logs(json.loads(Path(path).read_text()))
