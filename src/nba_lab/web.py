@@ -23,7 +23,10 @@ from .impact import fit_rapm
 from .impact_source import load_impact_snapshot
 from .lineup import compare_lineups
 from .leverage import rank_upcoming_games
+from .replay import compare_replay_intervention
+from .replay_source import load_replay_directory
 from .demo_impact import synthetic_impact_snapshot
+from .demo_replay import synthetic_replay_snapshots
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
 from .teams import TEAMS
@@ -78,6 +81,21 @@ def _load_impact():
 IMPACT_SNAPSHOT, IMPACT_SOURCE = _load_impact()
 
 
+def _load_replays():
+    configured = os.environ.get("NBA_LAB_REPLAY_DIR")
+    directory = Path(configured) if configured else Path("data/replay")
+    snapshots = load_replay_directory(directory)
+    if snapshots:
+        return snapshots, {"kind": "official_snapshot", "path": str(directory)}
+    return synthetic_replay_snapshots(GAMES), {
+        "kind": "synthetic_demo",
+        "warning": "Synthetic replay checkpoints for offline testing. Sync PlayByPlayV3 snapshots for real events.",
+    }
+
+
+REPLAY_SNAPSHOTS, REPLAY_SOURCE = _load_replays()
+
+
 @lru_cache(maxsize=16)
 def _impact_result(alpha: float):
     return fit_rapm(list(IMPACT_SNAPSHOT.stints), alpha=alpha)
@@ -125,6 +143,15 @@ class LineupCompareRequest(BaseModel):
     prior_possessions: float = Field(default=300.0, gt=0, le=5000)
 
 
+class ReplaySimRequest(BaseModel):
+    game_id: str
+    action_number: int
+    trials: int = Field(default=5000, ge=100, le=50000)
+    seed: int = 2026
+    home_score_delta: int = Field(default=0, ge=-20, le=20)
+    away_score_delta: int = Field(default=0, ge=-20, le=20)
+
+
 def _serialize(result):
     return {
         "as_of": result.as_of.isoformat(),
@@ -147,6 +174,8 @@ def status():
         "award_logs": len(AWARD_LOGS),
         "impact_source": IMPACT_SOURCE,
         "impact_stints": len(IMPACT_SNAPSHOT.stints),
+        "replay_source": REPLAY_SOURCE,
+        "replay_games": len(REPLAY_SNAPSHOTS),
     }
 
 
@@ -447,6 +476,90 @@ def leverage(as_of: date, trials: int = 500, limit: int = 10):
         "trials_per_world": trials,
         "games": [asdict(row) for row in rows],
         "definition": "For each game, force each possible winner in paired season simulations and measure the resulting league-wide distribution shift.",
+    }
+
+
+@app.get("/api/replay/games")
+def replay_games():
+    game_by_id = {game.game_id: game for game in GAMES}
+    rows = []
+    for game_id, snapshot in REPLAY_SNAPSHOTS.items():
+        game = game_by_id.get(game_id)
+        if game is None:
+            continue
+        rows.append({
+            "game_id": game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+            "home_score": game.home_score,
+            "away_score": game.away_score,
+            "events": len(snapshot.events),
+            "source": snapshot.source,
+        })
+    rows.sort(key=lambda row: (row["date"], row["game_id"]), reverse=True)
+    return {"source": REPLAY_SOURCE, "games": rows}
+
+
+@app.get("/api/replay/{game_id}")
+def replay_events(game_id: str):
+    snapshot = REPLAY_SNAPSHOTS.get(game_id)
+    if snapshot is None:
+        raise HTTPException(404, f"No replay snapshot for game: {game_id}")
+    game = next((game for game in GAMES if game.game_id == game_id), None)
+    if game is None:
+        raise HTTPException(404, f"Unknown scheduled game: {game_id}")
+    return {
+        "source": REPLAY_SOURCE,
+        "game": {
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+            "home_score": game.home_score,
+            "away_score": game.away_score,
+        },
+        "events": [asdict(event) for event in snapshot.events],
+    }
+
+
+@app.post("/api/replay/simulate")
+def replay_simulate(request: ReplaySimRequest):
+    snapshot = REPLAY_SNAPSHOTS.get(request.game_id)
+    if snapshot is None:
+        raise HTTPException(404, f"No replay snapshot for game: {request.game_id}")
+    event = next(
+        (event for event in snapshot.events if event.action_number == request.action_number),
+        None,
+    )
+    if event is None:
+        raise HTTPException(404, f"Unknown replay action: {request.action_number}")
+    try:
+        result = compare_replay_intervention(
+            GAMES,
+            event,
+            trials=request.trials,
+            seed=request.seed,
+            home_score_delta=request.home_score_delta,
+            away_score_delta=request.away_score_delta,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    game = next(game for game in GAMES if game.game_id == request.game_id)
+    return {
+        "source": REPLAY_SOURCE,
+        "game": {
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+        },
+        "event": asdict(event),
+        "baseline": asdict(result.baseline),
+        "altered": asdict(result.altered),
+        "home_win_probability_delta": result.home_win_probability_delta,
+        "expected_final_margin_delta": result.expected_final_margin_delta,
+        "warning": "This is a game-state counterfactual baseline, not a possession-level causal model.",
     }
 
 
