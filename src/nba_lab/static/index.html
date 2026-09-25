@@ -14,7 +14,7 @@
       <button class="nav-item" data-view="timeline"><span>⌁</span>Timeline Lab</button>
       <button class="nav-item" data-view="model"><span>◎</span>Model Lab</button>
       <div class="nav-section">NEXT LABS</div>
-      <button class="nav-item future" data-view="awards"><span>★</span>Awards Lab<em>NEXT</em></button>
+      <button class="nav-item" data-view="awards"><span>★</span>Awards Lab</button>
       <button class="nav-item future" data-view="impact"><span>±</span>Player Impact<em>NEXT</em></button>
       <button class="nav-item future" data-view="lineup"><span>⬡</span>Lineup Lab</button>
       <button class="nav-item future" data-view="game"><span>▶</span>Game Replay</button>
@@ -74,7 +74,17 @@
         <div class="model-grid"><div class="panel chart-panel"><div class="section-head"><div><span class="eyebrow">CALIBRATION</span><h2>Predicted vs. observed</h2></div><span>perfect calibration lies on the diagonal</span></div><div id="calibration-chart" class="chart"></div></div><div class="panel methodology"><span class="eyebrow">DEPLOYED BASELINE</span><h2 id="model-name">Frozen Elo baseline</h2><div class="spec-row"><span>Base rating</span><strong id="model-base">1500</strong></div><div class="spec-row"><span>K-factor</span><strong id="model-k">20</strong></div><div class="spec-row"><span>Home advantage</span><strong id="model-home">65</strong></div><hr><p id="promotion-rule">More complex models must beat this baseline chronologically before promotion.</p><div class="warning-box"><strong>Known gaps</strong><span>Official tiebreakers, injuries, player availability, rotations, matchup effects, and possession context are not deployed yet.</span></div></div></div>
       </section>
 
-      <section class="view future-view" id="view-awards"><span class="eyebrow">NEXT MODULE</span><h2>Awards Lab</h2><p>Historical MVP race replay will be rebuilt from your existing award model with strict point-in-time features, correct eligibility, and simulated season endings.</p></section>
+      <section class="view" id="view-awards">
+        <div class="awards-toolbar panel">
+          <div><span class="eyebrow">MVP / POINT-IN-TIME BASELINE</span><h2>Replay the race.</h2><p>Every ranking uses only player and team results available through the selected date.</p></div>
+          <div class="award-date-box"><label>Race date<input id="award-date" type="date" value="2026-01-15"></label><div class="award-slider-row"><input id="award-slider" type="range" min="0" max="100" value="55"><span id="award-source">Loading…</span></div></div>
+        </div>
+        <div class="award-grid">
+          <div class="panel race-board"><div class="section-head"><div><span class="eyebrow">CURRENT BOARD</span><h2 id="award-board-title">MVP race</h2></div><span id="award-date-label"></span></div><div id="award-board" class="award-board"></div></div>
+          <div class="panel award-detail"><span class="eyebrow">WHY THE MODEL LIKES HIM</span><h2 id="award-detail-name">Select a candidate</h2><div id="award-detail-meta" class="award-detail-meta"></div><div id="award-features" class="award-features"></div><p class="note">Race share is a normalized baseline score, not a calibrated probability of winning MVP.</p></div>
+        </div>
+        <div class="panel award-history"><div class="section-head"><div><span class="eyebrow">RACE HISTORY</span><h2>Who led, and when?</h2></div><span>weekly snapshots · hover points for score</span></div><div id="award-history-chart" class="chart awards-chart"></div></div>
+      </section>
       <section class="view future-view" id="view-impact"><span class="eyebrow">NEXT MODULE</span><h2>Player Impact</h2><p>Possession/stint data → regularized adjusted plus-minus → uncertainty → player-aware season counterfactuals.</p></section>
       <section class="view future-view" id="view-lineup"><span class="eyebrow">PLANNED MODULE</span><h2>Lineup Lab</h2><p>Build a five-man unit, estimate offense/defense/net with uncertainty, and inspect interactions that are supported by enough data.</p></section>
       <section class="view future-view" id="view-game"><span class="eyebrow">PLANNED MODULE</span><h2>Game Replay</h2><p>Open a historical game at a chosen possession, alter the lineup or event, and simulate forward from that exact state.</p></section>
