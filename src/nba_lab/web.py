@@ -19,6 +19,9 @@ from .demo import synthetic_demo_games
 from .demo_awards import synthetic_player_games
 from .diagnostics import calibration_curve
 from .matchup import simulate_matchup
+from .impact import fit_rapm
+from .impact_source import load_impact_snapshot
+from .demo_impact import synthetic_impact_snapshot
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
 from .teams import TEAMS
@@ -56,6 +59,26 @@ def _load_award_logs():
 
 
 AWARD_LOGS, AWARD_SOURCE = _load_award_logs()
+
+
+def _load_impact():
+    configured = os.environ.get("NBA_LAB_IMPACT_SNAPSHOT")
+    candidates = [Path(configured)] if configured else [Path("data/impact_stints.json")]
+    for path in candidates:
+        if path and path.exists():
+            return load_impact_snapshot(path), {"kind": "normalized_snapshot", "path": str(path)}
+    return synthetic_impact_snapshot(), {
+        "kind": "synthetic_demo",
+        "warning": "Synthetic RAPM stints for offline testing. Import normalized stint data for real player estimates.",
+    }
+
+
+IMPACT_SNAPSHOT, IMPACT_SOURCE = _load_impact()
+
+
+@lru_cache(maxsize=16)
+def _impact_result(alpha: float):
+    return fit_rapm(list(IMPACT_SNAPSHOT.stints), alpha=alpha)
 
 
 @lru_cache(maxsize=256)
@@ -113,6 +136,8 @@ def status():
         "team_metadata": {code: asdict(info) for code, info in TEAMS.items()},
         "awards_source": AWARD_SOURCE,
         "award_logs": len(AWARD_LOGS),
+        "impact_source": IMPACT_SOURCE,
+        "impact_stints": len(IMPACT_SNAPSHOT.stints),
     }
 
 
@@ -310,6 +335,45 @@ def matchup(request: MatchupRequest):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return asdict(result)
+
+
+@app.get("/api/impact")
+def impact(alpha: float = 1000.0, limit: int = 100):
+    if alpha <= 0 or alpha > 10000:
+        raise HTTPException(422, "alpha must be in (0, 10000]")
+    result = _impact_result(float(alpha))
+    rows = []
+    for player in result.players[: max(1, min(limit, 500))]:
+        meta = IMPACT_SNAPSHOT.players.get(player.player_id)
+        rows.append({
+            **asdict(player),
+            "player_name": meta.player_name if meta else player.player_id,
+            "team": meta.team if meta else "UNK",
+        })
+    return {
+        "source": IMPACT_SOURCE,
+        "alpha": result.alpha,
+        "home_court_per_100": result.home_court_per_100,
+        "weighted_rmse": result.weighted_rmse,
+        "stints": len(IMPACT_SNAPSHOT.stints),
+        "games": len({stint.game_id for stint in IMPACT_SNAPSHOT.stints}),
+        "players": rows,
+        "warning": "RAPM is a regularized association estimate, not a causal player-value truth.",
+    }
+
+
+@app.get("/api/impact/{player_id}/path")
+def impact_path(player_id: str):
+    if player_id not in IMPACT_SNAPSHOT.players:
+        raise HTTPException(404, f"Unknown impact player: {player_id}")
+    points = []
+    for alpha in (100.0, 300.0, 1000.0, 3000.0):
+        result = _impact_result(alpha)
+        row = next((player for player in result.players if player.player_id == player_id), None)
+        if row is not None:
+            points.append({"alpha": alpha, "impact_per_100": row.impact_per_100, "rank": row.rank})
+    meta = IMPACT_SNAPSHOT.players[player_id]
+    return {"player": asdict(meta), "points": points, "source": IMPACT_SOURCE}
 
 
 @app.get("/api/timeline/{team}")
