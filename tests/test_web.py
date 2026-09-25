@@ -33,6 +33,7 @@ def test_recent_games_and_historical_flip_api():
     data = r.json()
     assert data['intervention']['kind'] == 'flip_game'
     assert data['intervention']['original_winner'] != data['intervention']['flipped_winner']
+    assert 'award_ripple' in data
 
 
 def test_timeline_and_diagnostics_endpoints():
