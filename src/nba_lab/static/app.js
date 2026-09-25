@@ -111,7 +111,7 @@ function replayClock(seconds){
 function replayPeriod(period){return period<=4?`Q${period}`:`OT${period-4}`}
 function clearReplayResults(){
   ['replay-base-prob','replay-alt-prob','replay-prob-delta','replay-margin'].forEach(id=>$(id).textContent='—');
-  $('replay-run-note').textContent='run a simulation';$('replay-prob-bars').innerHTML='';$('replay-margin-dist').innerHTML='';
+  $('replay-run-note').textContent='run a simulation';$('replay-prob-bars').innerHTML='';$('replay-margin-dist').innerHTML='';$('replay-season-panel').hidden=true;$('replay-season-ripple').innerHTML='';
 }
 function renderReplayEvent(){
   if(!replayData?.events?.length)return;
@@ -182,6 +182,18 @@ function renderReplayResult(d){
     </div>
     <div class="margin-labels"><span>${min}</span><span>home margin</span><span>+${max}</span></div>
     <div class="margin-summary"><div><span>P10</span><strong>${a.p10_final_margin.toFixed(1)}</strong></div><div><span>MEDIAN</span><strong>${a.p50_final_margin.toFixed(1)}</strong></div><div><span>P90</span><strong>${a.p90_final_margin.toFixed(1)}</strong></div></div>`;
+  renderReplaySeasonRipple(d.season_ripple);
+}
+function renderReplaySeasonRipple(ripple){
+  if(!ripple?.teams?.length)return;
+  $('replay-season-panel').hidden=false;
+  $('replay-season-note').textContent=`${ripple.trials.toLocaleString()} paired season branches`;
+  $('replay-season-ripple').innerHTML=ripple.teams.slice(0,10).map(row=>{
+    const title=row.championship_probability_delta*100,playoffs=row.playoffs_probability_delta*100,wins=row.expected_wins_delta;
+    const primary=Math.abs(title)>=.01?title:playoffs;
+    const cls=primary>=0?'up':'down';
+    return `<div class="replay-season-card"><span>${row.team}</span><strong class="${cls}">${wins>=0?'+':''}${wins.toFixed(3)} wins</strong><small>playoffs ${playoffs>=0?'+':''}${playoffs.toFixed(2)} pts<br>title ${title>=0?'+':''}${title.toFixed(2)} pts</small></div>`;
+  }).join('');
 }
 
 async function loadLineup(){
