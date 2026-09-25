@@ -5,6 +5,7 @@ import random
 
 from .domain import Game, TeamForecast
 from .elo import EloModel
+from .teams import conference_for
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,23 @@ def _observed_records(games: list[Game], as_of: date):
     return wins, losses
 
 
+def _seed_groups(teams: list[str], wins: dict[str, int], rng: random.Random):
+    """Return seed order by conference with randomized tie resolution.
+
+    This is intentionally not presented as official NBA tiebreaker logic yet.
+    Randomized ties keep probability mass honest until head-to-head/division
+    tiebreakers are modeled explicitly.
+    """
+    by_conf: dict[str, list[str]] = defaultdict(list)
+    for team in teams:
+        by_conf[conference_for(team) or "Unknown"].append(team)
+    result: dict[str, list[str]] = {}
+    for conference, members in by_conf.items():
+        jitter = {team: rng.random() for team in members}
+        result[conference] = sorted(members, key=lambda team: (-wins[team], jitter[team]))
+    return result
+
+
 def simulate_remaining_season(
     games: list[Game],
     as_of: date,
@@ -47,17 +65,24 @@ def simulate_remaining_season(
 
     rng = random.Random(seed)
     win_samples = {team: [] for team in teams}
-    first_seed = defaultdict(int)
+    first_seed = defaultdict(float)
+    top6 = defaultdict(float)
+    playin = defaultdict(float)
     for _ in range(trials):
         wins = {team: observed_wins[team] for team in teams}
         for game in future:
             p_home = model.win_probability(ratings[game.home_team], ratings[game.away_team])
             winner = game.home_team if rng.random() < p_home else game.away_team
             wins[winner] += 1
-        best = max(wins.values())
-        leaders = [team for team, total in wins.items() if total == best]
-        for team in leaders:
-            first_seed[team] += 1 / len(leaders)
+
+        orders = _seed_groups(teams, wins, rng)
+        for order in orders.values():
+            if order:
+                first_seed[order[0]] += 1
+            for team in order[:6]:
+                top6[team] += 1
+            for team in order[6:10]:
+                playin[team] += 1
         for team in teams:
             win_samples[team].append(wins[team])
 
@@ -75,6 +100,8 @@ def simulate_remaining_season(
                 p10_wins=lo,
                 p90_wins=hi,
                 first_seed_probability=first_seed[team] / trials,
+                top6_probability=top6[team] / trials,
+                playin_probability=playin[team] / trials,
             )
         )
     forecasts.sort(key=lambda x: (-x.expected_wins, x.team))
