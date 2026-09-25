@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from .analysis import compare_counterfactual
 from .awards import build_award_race
+from .awards_sim import simulate_award_futures
 from .awards_source import load_player_logs
 from .backtest import chronological_backtest
 from .branch import compare_game_flip
@@ -84,6 +85,12 @@ class MatchupRequest(SimRequest):
     team_a: str
     team_b: str
     best_of: int = 7
+
+
+class AwardSimRequest(BaseModel):
+    as_of: date
+    trials: int = Field(default=1000, ge=100, le=5000)
+    seed: int = 2026
 
 
 def _serialize(result):
@@ -204,6 +211,24 @@ def awards_race(as_of: date, limit: int = 10):
         "award": race.award,
         "source": AWARD_SOURCE,
         "candidates": [asdict(candidate) for candidate in race.candidates[: max(1, min(limit, 25))]],
+    }
+
+
+@app.post("/api/awards/simulate")
+def awards_simulate(request: AwardSimRequest):
+    result = simulate_award_futures(
+        GAMES,
+        AWARD_LOGS,
+        request.as_of,
+        trials=request.trials,
+        seed=request.seed,
+    )
+    return {
+        "as_of": result.as_of.isoformat(),
+        "trials": result.trials,
+        "source": AWARD_SOURCE,
+        "candidates": [asdict(candidate) for candidate in result.candidates],
+        "warning": "Leader probability is the share of simulated seasons where this baseline race score finishes first; it is not a calibrated voter probability.",
     }
 
 
