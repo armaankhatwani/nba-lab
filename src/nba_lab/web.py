@@ -22,6 +22,7 @@ from .matchup import simulate_matchup
 from .impact import fit_rapm
 from .impact_source import load_impact_snapshot
 from .lineup import compare_lineups
+from .leverage import rank_upcoming_games
 from .demo_impact import synthetic_impact_snapshot
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
@@ -433,6 +434,19 @@ def lineup_compare(request: LineupCompareRequest):
         "lineup_b": serialize_lineup(result.lineup_b),
         "neutral_margin_per_100": result.neutral_margin_per_100,
         "warning": "Lineup estimates are regularized model expectations, not observed causal effects.",
+    }
+
+
+@app.get("/api/leverage")
+def leverage(as_of: date, trials: int = 500, limit: int = 10):
+    trials = max(100, min(trials, 5000))
+    limit = max(1, min(limit, 20))
+    rows = rank_upcoming_games(GAMES, as_of, trials=trials, seed=2026, limit=limit)
+    return {
+        "as_of": as_of.isoformat(),
+        "trials_per_world": trials,
+        "games": [asdict(row) for row in rows],
+        "definition": "For each game, force each possible winner in paired season simulations and measure the resulting league-wide distribution shift.",
     }
 
 
