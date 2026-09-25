@@ -14,7 +14,7 @@ from .awards import build_award_race
 from .awards_sim import simulate_award_futures
 from .awards_source import load_player_logs
 from .backtest import chronological_backtest
-from .branch import compare_game_flip
+from .branch import compare_game_flip, flip_game
 from .demo import synthetic_demo_games
 from .demo_awards import synthetic_player_games
 from .diagnostics import calibration_curve
@@ -184,10 +184,29 @@ def flip_game_result(request: FlipRequest):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     target = next(game for game in GAMES if game.game_id == request.game_id)
+    altered_games, _ = flip_game(GAMES, request.game_id)
+    award_before = build_award_race(GAMES, AWARD_LOGS, request.as_of)
+    award_after = build_award_race(altered_games, AWARD_LOGS, request.as_of)
+    award_left = {candidate.player_id: candidate for candidate in award_before.candidates}
+    award_right = {candidate.player_id: candidate for candidate in award_after.candidates}
+    award_ripple = []
+    for player_id in sorted(set(award_left) & set(award_right)):
+        left, right = award_left[player_id], award_right[player_id]
+        award_ripple.append({
+            "player_id": player_id,
+            "player_name": left.player_name,
+            "team": left.team,
+            "race_score_delta": right.race_score - left.race_score,
+            "race_share_delta": right.race_share - left.race_share,
+            "before_rank": next(i + 1 for i, candidate in enumerate(award_before.candidates) if candidate.player_id == player_id),
+            "after_rank": next(i + 1 for i, candidate in enumerate(award_after.candidates) if candidate.player_id == player_id),
+        })
+    award_ripple.sort(key=lambda row: abs(row["race_score_delta"]), reverse=True)
     return {
         "baseline": _serialize(result.baseline),
         "altered": _serialize(result.altered),
         "deltas": [asdict(delta) for delta in result.deltas],
+        "award_ripple": award_ripple[:8],
         "intervention": {
             "kind": "flip_game",
             "game_id": result.game_id,
