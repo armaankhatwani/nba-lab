@@ -25,6 +25,7 @@ from .lineup import compare_lineups
 from .leverage import rank_upcoming_games
 from .replay import compare_replay_intervention
 from .replay_source import load_replay_directory
+from .replay_season import propagate_replay_to_season
 from .demo_impact import synthetic_impact_snapshot
 from .demo_replay import synthetic_replay_snapshots
 from .source import load_snapshot
@@ -546,6 +547,14 @@ def replay_simulate(request: ReplaySimRequest):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     game = next(game for game in GAMES if game.game_id == request.game_id)
+    season_ripple = propagate_replay_to_season(
+        GAMES,
+        request.game_id,
+        result.baseline.home_win_probability,
+        result.altered.home_win_probability,
+        trials=min(1000, request.trials),
+        seed=request.seed,
+    )
     return {
         "source": REPLAY_SOURCE,
         "game": {
@@ -559,6 +568,11 @@ def replay_simulate(request: ReplaySimRequest):
         "altered": asdict(result.altered),
         "home_win_probability_delta": result.home_win_probability_delta,
         "expected_final_margin_delta": result.expected_final_margin_delta,
+        "season_ripple": {
+            "trials": season_ripple.trials,
+            "home_win_probability_delta": season_ripple.home_win_probability_delta,
+            "teams": [asdict(row) for row in season_ripple.teams[:10]],
+        },
         "warning": "This is a game-state counterfactual baseline, not a possession-level causal model.",
     }
 
