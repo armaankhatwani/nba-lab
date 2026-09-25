@@ -12,9 +12,11 @@ from .analysis import compare_counterfactual
 from .backtest import chronological_backtest
 from .branch import compare_game_flip
 from .demo import synthetic_demo_games
+from .diagnostics import calibration_curve
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
 from .teams import TEAMS
+from .timeline import team_timeline
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -155,6 +157,46 @@ def flip_game_result(request: FlipRequest):
             "original_winner": result.original_winner,
             "flipped_winner": result.flipped_winner,
             "label": "historical result branch",
+        },
+    }
+
+
+@app.get("/api/timeline/{team}")
+def timeline(team: str):
+    if team not in TEAMS:
+        raise HTTPException(404, f"Unknown team: {team}")
+    points = team_timeline(GAMES, team)
+    if not points:
+        raise HTTPException(404, f"No completed games found for {team}")
+    return {
+        "team": asdict(TEAMS[team]),
+        "points": [asdict(point) for point in points],
+        "summary": {
+            "games": len(points),
+            "wins": points[-1].wins,
+            "losses": points[-1].losses,
+            "current_rating": points[-1].rating,
+            "peak_rating": max(point.rating for point in points),
+            "low_rating": min(point.rating for point in points),
+            "largest_win": max((point.margin for point in points), default=0),
+            "largest_loss": min((point.margin for point in points), default=0),
+        },
+    }
+
+
+@app.get("/api/diagnostics")
+def diagnostics():
+    metrics = asdict(chronological_backtest(GAMES))
+    curve = [asdict(bin_) for bin_ in calibration_curve(GAMES, bins=10)]
+    return {
+        "metrics": metrics,
+        "calibration": curve,
+        "model": {
+            "name": "Frozen Elo baseline",
+            "base": 1500,
+            "k": 20,
+            "home_advantage": 65,
+            "promotion_rule": "More complex models must beat this baseline chronologically before promotion.",
         },
     }
 
