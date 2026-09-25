@@ -2,35 +2,84 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NBA Lab — Rewrite the Season</title><link rel="stylesheet" href="/static/style.css">
+<title>NBA Lab</title><link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header><div><span class="eyebrow">NBA LAB / COUNTERFACTUAL ENGINE</span><h1>Rewrite the season.</h1><p>Freeze the league at any date. Branch history. Simulate thousands of paired futures. Measure what changes downstream.</p></div><div id="source" class="source"></div></header>
-<main>
-<section class="controls panel">
-  <div class="mode"><button data-mode="flip" class="active">FLIP A GAME</button><button data-mode="strength">STRENGTH TEST</button></div>
-  <label>As-of date<input id="asof" type="date" value="2026-01-15"></label>
-  <label>Monte Carlo trials<select id="trials"><option>1000</option><option selected>5000</option><option>10000</option><option>25000</option></select></label>
-  <div id="flip-controls">
-    <label>Team filter<select id="game-team"></select></label>
-    <label>Historical game<select id="game"></select></label>
-    <p class="note">The selected final is reversed, the league state is rebuilt, and both futures reuse the same random stream.</p>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-ball">◉</div><div><strong>NBA LAB</strong><span>basketball systems</span></div></div>
+    <nav>
+      <button class="nav-item active" data-view="home"><span>⌂</span>Overview</button>
+      <button class="nav-item" data-view="season"><span>↗</span>Season Lab</button>
+      <button class="nav-item" data-view="timeline"><span>⌁</span>Timeline Lab</button>
+      <button class="nav-item" data-view="model"><span>◎</span>Model Lab</button>
+      <div class="nav-section">NEXT LABS</div>
+      <button class="nav-item future" data-view="awards"><span>★</span>Awards Lab<em>NEXT</em></button>
+      <button class="nav-item future" data-view="impact"><span>±</span>Player Impact<em>NEXT</em></button>
+      <button class="nav-item future" data-view="lineup"><span>⬡</span>Lineup Lab</button>
+      <button class="nav-item future" data-view="game"><span>▶</span>Game Replay</button>
+    </nav>
+    <div class="sidebar-foot"><div id="source-dot" class="dot"></div><div><strong id="source-short">Loading data…</strong><span id="source-detail"></span></div></div>
+  </aside>
+
+  <div class="main-shell">
+    <header class="topbar"><div><span class="eyebrow" id="view-kicker">NBA LAB / OVERVIEW</span><h1 id="view-title">Basketball, as a system.</h1></div><div class="top-actions"><span id="date-range"></span><a href="https://github.com/armaankhatwani/nba-lab" target="_blank">GitHub ↗</a></div></header>
+
+    <main class="content">
+      <section class="view active" id="view-home">
+        <div class="hero-copy"><p>One host for simulation, historical counterfactuals, model evaluation, awards, player impact, lineups, and eventually possession-level game replay.</p></div>
+        <div class="lab-grid">
+          <article class="lab-card featured" data-open="season"><span class="card-num">01</span><div><span class="status live">LIVE</span><h2>Season Lab</h2><p>Freeze any date, branch history, and simulate the rest of the regular season through the Finals.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="timeline"><span class="card-num">02</span><div><span class="status live">LIVE</span><h2>Timeline Lab</h2><p>Replay a team's season as an evolving rating and record instead of a static final table.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card" data-open="model"><span class="card-num">03</span><div><span class="status live">LIVE</span><h2>Model Lab</h2><p>Inspect calibration, backtests, assumptions, and the promotion gate for future models.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card muted"><span class="card-num">04</span><div><span class="status next">NEXT</span><h2>Awards Lab</h2><p>Point-in-time MVP race replay, remaining-season award simulation, and voter-model experiments.</p></div></article>
+          <article class="lab-card muted"><span class="card-num">05</span><div><span class="status next">NEXT</span><h2>Player Impact</h2><p>RAPM-style player value with uncertainty, then player-aware injuries, trades, and what-ifs.</p></div></article>
+          <article class="lab-card muted"><span class="card-num">06</span><div><span class="status queued">QUEUED</span><h2>Lineup + Game Lab</h2><p>Estimate unseen lineups, then rewrite a historical game from a selected possession.</p></div></article>
+        </div>
+        <div class="overview-strip">
+          <div><span>ENGINE</span><strong>Point-in-time Monte Carlo</strong></div>
+          <div><span>COUNTERFACTUALS</span><strong>Common-random-number paired worlds</strong></div>
+          <div><span>RULE</span><strong>Complexity must beat the frozen baseline</strong></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-season">
+        <div class="season-layout">
+          <aside class="control-rail panel">
+            <div class="segmented"><button data-mode="flip" class="active">FLIP GAME</button><button data-mode="strength">STRENGTH TEST</button></div>
+            <label>As-of date<input id="asof" type="date" value="2026-01-15"></label>
+            <label>Monte Carlo trials<select id="trials"><option>1000</option><option selected>5000</option><option>10000</option><option>25000</option></select></label>
+            <div id="flip-controls"><label>Team filter<select id="game-team"></select></label><label>Historical game<select id="game"></select></label><p class="note">Reverse one completed result, rebuild the league state, then replay both futures with matched randomness.</p></div>
+            <div id="strength-controls" hidden><label>What-if team<select id="team"></select></label><label>Research strength adjustment<div class="range-row"><input id="delta" type="range" min="-200" max="200" step="10" value="80"><strong id="delta-value">+80 Elo</strong></div></label><p class="note">Research control only. This is intentionally not labeled as a trade or player effect.</p></div>
+            <button class="primary" id="run">REWRITE HISTORY <span>↗</span></button>
+          </aside>
+          <div class="season-main">
+            <div class="metric-grid"><article class="panel metric"><span>MODEL HEALTH</span><strong id="brier">—</strong><small>Brier score</small></article><article class="panel metric"><span>SIMULATIONS</span><strong id="sim-count">—</strong><small>paired futures</small></article><article class="panel metric"><span>BIGGEST RIPPLE</span><strong id="ripple">—</strong><small>expected-win shift</small></article><article class="panel metric"><span>RUN TIME</span><strong id="runtime">—</strong><small>browser round-trip</small></article></div>
+            <div class="panel focus" id="focus"><span class="eyebrow">COUNTERFACTUAL ENGINE</span><h2>Choose a prior game and branch history.</h2><p>NBA Lab will rebuild the point-in-time state, simulate both worlds, and isolate the downstream delta.</p></div>
+            <div class="panel ripple-panel"><div class="section-head"><div><span class="eyebrow">RIPPLE MAP</span><h2>Who gains and loses?</h2></div><span>expected-win delta across the league</span></div><div id="ripple-bars" class="ripple-bars empty"><span>Run a branch to reveal league-wide effects.</span></div></div>
+            <div class="panel table-panel"><div class="section-head"><div><span class="eyebrow">LEAGUE DISTRIBUTION</span><h2>Expected wins & postseason paths</h2></div></div><div class="scroll"><table><thead><tr><th>Team</th><th>Record now</th><th>Expected wins</th><th>80% range</th><th>No. 1</th><th>Top 6</th><th>Play-in</th><th>Playoffs</th><th>Title</th><th>Δ wins</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-timeline">
+        <div class="lab-toolbar panel"><div><span class="eyebrow">TEAM HISTORY</span><h2>How did the season actually evolve?</h2></div><label>Team<select id="timeline-team"></select></label></div>
+        <div class="metric-grid timeline-metrics"><article class="panel metric"><span>RECORD</span><strong id="tl-record">—</strong><small>completed games</small></article><article class="panel metric"><span>CURRENT ELO</span><strong id="tl-current">—</strong><small>after latest final</small></article><article class="panel metric"><span>PEAK ELO</span><strong id="tl-peak">—</strong><small>season high</small></article><article class="panel metric"><span>RANGE</span><strong id="tl-range">—</strong><small>low → high</small></article></div>
+        <div class="panel chart-panel"><div class="section-head"><div><span class="eyebrow">RATING TRAJECTORY</span><h2 id="tl-title">Team timeline</h2></div><span>hover/tap points for game context</span></div><div id="timeline-chart" class="chart"></div></div>
+        <div class="panel game-log"><div class="section-head"><div><span class="eyebrow">GAME LOG</span><h2>Season checkpoints</h2></div></div><div id="timeline-games" class="timeline-games"></div></div>
+      </section>
+
+      <section class="view" id="view-model">
+        <div class="metric-grid model-metrics"><article class="panel metric"><span>BRIER</span><strong id="md-brier">—</strong><small>lower is better</small></article><article class="panel metric"><span>LOG LOSS</span><strong id="md-logloss">—</strong><small>probabilistic penalty</small></article><article class="panel metric"><span>ACCURACY</span><strong id="md-accuracy">—</strong><small>0.5 decision threshold</small></article><article class="panel metric"><span>GAMES</span><strong id="md-games">—</strong><small>chronological evaluations</small></article></div>
+        <div class="model-grid"><div class="panel chart-panel"><div class="section-head"><div><span class="eyebrow">CALIBRATION</span><h2>Predicted vs. observed</h2></div><span>perfect calibration lies on the diagonal</span></div><div id="calibration-chart" class="chart"></div></div><div class="panel methodology"><span class="eyebrow">DEPLOYED BASELINE</span><h2 id="model-name">Frozen Elo baseline</h2><div class="spec-row"><span>Base rating</span><strong id="model-base">1500</strong></div><div class="spec-row"><span>K-factor</span><strong id="model-k">20</strong></div><div class="spec-row"><span>Home advantage</span><strong id="model-home">65</strong></div><hr><p id="promotion-rule">More complex models must beat this baseline chronologically before promotion.</p><div class="warning-box"><strong>Known gaps</strong><span>Official tiebreakers, injuries, player availability, rotations, matchup effects, and possession context are not deployed yet.</span></div></div></div>
+      </section>
+
+      <section class="view future-view" id="view-awards"><span class="eyebrow">NEXT MODULE</span><h2>Awards Lab</h2><p>Historical MVP race replay will be rebuilt from your existing award model with strict point-in-time features, correct eligibility, and simulated season endings.</p></section>
+      <section class="view future-view" id="view-impact"><span class="eyebrow">NEXT MODULE</span><h2>Player Impact</h2><p>Possession/stint data → regularized adjusted plus-minus → uncertainty → player-aware season counterfactuals.</p></section>
+      <section class="view future-view" id="view-lineup"><span class="eyebrow">PLANNED MODULE</span><h2>Lineup Lab</h2><p>Build a five-man unit, estimate offense/defense/net with uncertainty, and inspect interactions that are supported by enough data.</p></section>
+      <section class="view future-view" id="view-game"><span class="eyebrow">PLANNED MODULE</span><h2>Game Replay</h2><p>Open a historical game at a chosen possession, alter the lineup or event, and simulate forward from that exact state.</p></section>
+    </main>
   </div>
-  <div id="strength-controls" hidden>
-    <label>What-if team<select id="team"></select></label>
-    <label>Research strength adjustment<div class="range-row"><input id="delta" type="range" min="-200" max="200" step="10" value="80"><strong id="delta-value">+80 Elo</strong></div></label>
-    <p class="note">Abstract research control only—not a player/trade effect. It stays separate until player impact is validated.</p>
-  </div>
-  <button id="run">REWRITE HISTORY <span>↗</span></button>
-</section>
-<section class="workspace">
-  <div class="hero-grid">
-    <article class="panel metric"><span>MODEL HEALTH</span><strong id="brier">—</strong><small>Brier score · chronological backtest</small></article>
-    <article class="panel metric"><span>SIMULATIONS</span><strong id="sim-count">—</strong><small>paired baseline + altered worlds</small></article>
-    <article class="panel metric"><span>BIGGEST RIPPLE</span><strong id="ripple">—</strong><small>largest expected-win shift</small></article>
-  </div>
-  <div class="panel focus" id="focus"><p>Choose a prior game and branch history.</p></div>
-  <div class="panel table-panel"><div class="table-head"><div><span class="eyebrow">LEAGUE DISTRIBUTION</span><h2>Expected wins & postseason paths</h2></div><span id="timing"></span></div><div class="scroll"><table><thead><tr><th>Team</th><th>Record now</th><th>Expected wins</th><th>80% range</th><th>No. 1 seed</th><th>Top 6</th><th>Play-in</th><th>Playoffs</th><th>Title</th><th>Δ wins</th></tr></thead><tbody id="rows"></tbody></table></div></div>
-</section>
-</main><script src="/static/app.js"></script>
+</div>
+<script src="/static/app.js"></script>
 </body></html>
