@@ -76,4 +76,25 @@ function drawAwardHistory(snapshots){
 $('award-slider').oninput=()=>{if(!awardHistory.length)return;const snap=awardHistory[Number($('award-slider').value)];$('award-date').value=snap.date;$('award-date-label').textContent=snap.date;clearTimeout(awardTimer);awardTimer=setTimeout(loadAwardRace,90)};
 $('award-date').onchange=()=>{if(awardHistory.length){let nearest=0,best=Infinity;awardHistory.forEach((s,i)=>{const diff=Math.abs(new Date(s.date)-new Date($('award-date').value));if(diff<best){best=diff;nearest=i}});$('award-slider').value=nearest}loadAwardRace()};
 
+
+$('award-simulate').onclick=async()=>{
+  const button=$('award-simulate');button.disabled=true;$('award-future-note').textContent='simulating alternate endings…';
+  try{
+    const d=await json('/api/awards/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      as_of:$('award-date').value,trials:Number($('award-sim-trials').value),seed:2026
+    })});
+    const max=Math.max(...d.candidates.map(x=>x.leader_probability),.001);
+    $('award-future-bars').classList.remove('empty');
+    $('award-future-bars').innerHTML=d.candidates.slice(0,8).map((p,i)=>`<div class="award-future-row">
+      <div class="award-future-player"><strong>${String(i+1).padStart(2,'0')} · ${p.player_name}</strong><span>${p.team} · mean final score ${p.mean_final_score.toFixed(1)}</span></div>
+      <div class="award-future-track"><div class="award-future-fill" style="width:${100*p.leader_probability/max}%"></div></div>
+      <strong>${pct(p.leader_probability)}</strong><span>top 3 ${pct(p.top3_probability)}</span>
+    </div>`).join('');
+    $('award-future-note').textContent=`${d.trials.toLocaleString()} simulated season endings`;
+  }catch(e){
+    $('award-future-bars').classList.add('empty');$('award-future-bars').innerHTML=`<span>${e.message}</span>`;
+    $('award-future-note').textContent='simulation failed';
+  }finally{button.disabled=false}
+};
+
 init();
