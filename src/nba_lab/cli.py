@@ -37,3 +37,26 @@ def sync():
 def main():
     import uvicorn
     uvicorn.run("nba_lab.web:app", host="127.0.0.1", port=8765, reload=False)
+
+
+def sync_awards():
+    """Freeze official NBA PlayerGameLogs for one season."""
+    parser = argparse.ArgumentParser(prog="nba-lab-sync-awards")
+    parser.add_argument("--season", required=True, help="Season such as 2025-26")
+    parser.add_argument("--output", default="data/playerGameLogs.json")
+    args = parser.parse_args()
+    try:
+        from nba_api.stats.endpoints import PlayerGameLogs
+    except ImportError as exc:
+        raise SystemExit("Install the data extra first: pip install -e '.[data]'") from exc
+    endpoint = PlayerGameLogs(
+        season_nullable=args.season,
+        season_type_nullable="Regular Season",
+        timeout=60,
+    )
+    payload = endpoint.get_normalized_dict()
+    content = json.dumps(payload, indent=2).encode()
+    target = Path(args.output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content)
+    print(f"Wrote {len(content):,} bytes to {target} from NBA PlayerGameLogs season={args.season}")
