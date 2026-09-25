@@ -1,9 +1,9 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[];
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
 const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['NBA LAB / SEASON LAB','Rewrite the season.'],matchup:['NBA LAB / MATCHUP LAB','Run the matchup.'],timeline:['NBA LAB / TIMELINE LAB','Replay how a team changed.'],model:['NBA LAB / MODEL LAB','Trust the model, then improve it.'],awards:['NBA LAB / AWARDS LAB','Replay the award race.'],impact:['NBA LAB / PLAYER IMPACT','Separate player from context.'],lineup:['NBA LAB / LINEUP LAB','Build the five.'],game:['NBA LAB / GAME REPLAY','Rewrite the possession.']};
-function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup()}
+function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards()}
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>openView(b.dataset.view));document.querySelectorAll('[data-open]').forEach(c=>c.onclick=()=>openView(c.dataset.open));
 async function loadGames(){const team=$('game-team').value;const q=new URLSearchParams({before:$('asof').value,limit:'50'});if(team)q.set('team',team);const games=await json('/api/games?'+q);$('game').replaceChildren();games.forEach(g=>{const o=document.createElement('option');o.value=g.game_id;o.textContent=`${g.date} · ${g.away_team} ${g.away_score} @ ${g.home_team} ${g.home_score}`;$('game').append(o)});if(!games.length){const o=document.createElement('option');o.textContent='No completed games before this date';$('game').append(o)}}
 async function init(){meta=await json('/api/status');const official=meta.source.kind==='official_snapshot';$('source-short').textContent=official?'Official NBA snapshot':'Synthetic fallback';$('source-detail').textContent=`${meta.games} games · ${meta.teams} teams`;$('source-dot').style.background=official?'var(--green)':'var(--orange)';$('date-range').textContent=`${meta.date_min} → ${meta.date_max}`;teamOptions($('team'));teamOptions($('game-team'),true);teamOptions($('timeline-team'));teamOptions($('matchup-a'));teamOptions($('matchup-b'));$('team').value='NYK';$('timeline-team').value='NYK';$('matchup-a').value='NYK';$('matchup-b').value='BOS';await loadGames();try{const b=await json('/api/backtest');$('brier').textContent=b.brier.toFixed(3)}catch(e){$('brier').textContent='—'}}
@@ -22,4 +22,58 @@ async function loadTimeline(){const team=$('timeline-team').value||'NYK';const d
 function drawTimeline(points){const el=$('timeline-chart');if(!points.length){el.innerHTML='';return}const W=900,H=250,pad=34;const vals=points.map(p=>p.rating);const min=Math.min(...vals)-15,max=Math.max(...vals)+15;const x=i=>pad+(W-2*pad)*(i/Math.max(1,points.length-1));const y=v=>H-pad-(H-2*pad)*((v-min)/(max-min));const path=points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.rating).toFixed(1)}`).join(' ');const grids=[min,(min+max)/2,max];el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grids.map(v=>`<line class="grid" x1="${pad}" y1="${y(v)}" x2="${W-pad}" y2="${y(v)}"/><text x="2" y="${y(v)+3}">${v.toFixed(0)}</text>`).join('')}<path class="line" d="${path}"/>${points.map((p,i)=>`<circle class="point ${p.win?'win':'loss'}" cx="${x(i)}" cy="${y(p.rating)}" r="4"><title>${p.date} · ${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin} vs ${p.opponent} · Elo ${p.rating}</title></circle>`).join('')}</svg>`}
 async function loadDiagnostics(){if(diagnosticsLoaded)return;const d=await json('/api/diagnostics');diagnosticsLoaded=true;$('md-brier').textContent=d.metrics.brier.toFixed(3);$('md-logloss').textContent=d.metrics.log_loss.toFixed(3);$('md-accuracy').textContent=pct(d.metrics.accuracy);$('md-games').textContent=d.metrics.games.toLocaleString();$('model-name').textContent=d.model.name;$('model-base').textContent=d.model.base;$('model-k').textContent=d.model.k;$('model-home').textContent=`${d.model.home_advantage} Elo`;$('promotion-rule').textContent=d.model.promotion_rule;drawCalibration(d.calibration)}
 function drawCalibration(points){const el=$('calibration-chart'),W=600,H=250,pad=34;const x=v=>pad+(W-2*pad)*v,y=v=>H-pad-(H-2*pad)*v;const path=points.map((p,i)=>`${i?'L':'M'}${x(p.mean_prediction)},${y(p.actual_rate)}`).join(' ');el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="grid" x1="${pad}" y1="${y(.5)}" x2="${W-pad}" y2="${y(.5)}"/><line class="grid" x1="${x(.5)}" y1="${pad}" x2="${x(.5)}" y2="${H-pad}"/><line class="ideal" x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}"/><path class="cal-line" d="${path}"/>${points.map(p=>`<circle class="point win" cx="${x(p.mean_prediction)}" cy="${y(p.actual_rate)}" r="${Math.max(4,Math.min(9,Math.sqrt(p.count)))}"><title>${(p.mean_prediction*100).toFixed(1)}% predicted · ${(p.actual_rate*100).toFixed(1)}% observed · n=${p.count}</title></circle>`).join('')}<text x="${pad}" y="${H-6}">0%</text><text x="${W-pad-18}" y="${H-6}">100%</text><text x="4" y="${pad+3}">100%</text><text x="4" y="${H-pad+3}">0%</text></svg>`}
+
+async function loadAwards(){
+  if(!awardHistory.length){
+    const h=await json('/api/awards/history?step_days=7&limit=6');
+    awardHistory=h.snapshots||[];
+    $('award-source').textContent=h.source?.kind==='official_snapshot'?'OFFICIAL PLAYER LOGS':'SYNTHETIC PLAYER LOGS';
+    if(awardHistory.length){
+      $('award-slider').min=0;$('award-slider').max=awardHistory.length-1;
+      const current=$('award-date').value||awardHistory[Math.floor(awardHistory.length/2)].date;
+      let nearest=0,best=Infinity;
+      awardHistory.forEach((s,i)=>{const diff=Math.abs(new Date(s.date)-new Date(current));if(diff<best){best=diff;nearest=i}});
+      $('award-slider').value=nearest;$('award-date').value=awardHistory[nearest].date;
+      drawAwardHistory(awardHistory);
+    }
+  }
+  await loadAwardRace();
+}
+async function loadAwardRace(){
+  const date=$('award-date').value;if(!date)return;
+  const d=await json(`/api/awards/race?as_of=${date}&limit=25`);
+  currentAwardRace=d;$('award-date-label').textContent=d.as_of;$('award-board-title').textContent=`${d.award} race · ${d.candidates.length} candidates`;
+  const top=d.candidates.slice(0,10);
+  $('award-board').innerHTML=top.map((p,i)=>`<div class="award-row ${i===0?'active':''}" data-award-player="${p.player_id}">
+    <div class="award-rank">${String(i+1).padStart(2,'0')}</div>
+    <div class="award-player"><strong>${p.player_name}</strong><span>${p.team} · ${p.games} GP</span><span class="eligibility ${p.eligibility_status}">${p.eligibility_status.replace('_',' ')}</span></div>
+    <div class="award-stat"><span>PTS</span><strong>${p.ppg.toFixed(1)}</strong></div>
+    <div class="award-stat"><span>REB / AST</span><strong>${p.rpg.toFixed(1)} / ${p.apg.toFixed(1)}</strong></div>
+    <div class="award-stat"><span>TEAM WIN%</span><strong>${(100*p.team_win_pct).toFixed(0)}%</strong></div>
+    <div class="award-stat award-score"><span>RACE SCORE</span><strong>${p.race_score.toFixed(1)}</strong></div>
+  </div>`).join('');
+  document.querySelectorAll('[data-award-player]').forEach(row=>row.onclick=()=>{document.querySelectorAll('.award-row').forEach(x=>x.classList.remove('active'));row.classList.add('active');const p=d.candidates.find(x=>x.player_id===row.dataset.awardPlayer);renderAwardDetail(p)});
+  if(top[0])renderAwardDetail(top[0]);
+}
+function renderAwardDetail(p){
+  $('award-detail-name').textContent=`${p.player_name} · ${p.team}`;
+  $('award-detail-meta').innerHTML=[
+    ['Race share',pct(p.race_share)],['PTS / REB / AST',`${p.ppg.toFixed(1)} / ${p.rpg.toFixed(1)} / ${p.apg.toFixed(1)}`],
+    ['TS%',pct(p.true_shooting)],['Team win%',pct(p.team_win_pct)],['Availability',pct(p.availability)],['Eligibility',p.eligibility_status.replace('_',' ')]
+  ].map(([k,v])=>`<div class="award-mini"><span>${k}</span><strong>${v}</strong></div>`).join('');
+  const order=['scoring','playmaking','rebounding','defense','efficiency','team_success','availability','ball_security'];
+  $('award-features').innerHTML=order.map(k=>{const v=p.feature_scores[k]||0;return `<div class="feature-row"><span>${k.replace('_',' ')}</span><div class="feature-track"><div class="feature-fill" style="width:${100*v}%"></div></div><strong>${Math.round(100*v)}</strong></div>`}).join('');
+}
+function drawAwardHistory(snapshots){
+  const el=$('award-history-chart');if(!snapshots.length){el.innerHTML='';return}
+  const latest=snapshots[snapshots.length-1].candidates.slice(0,6);const players=latest.map(x=>({id:x.player_id,name:x.player_name,team:x.team}));
+  const W=900,H=280,pad=38;const x=i=>pad+(W-2*pad)*(i/Math.max(1,snapshots.length-1));const all=[];players.forEach(p=>snapshots.forEach(s=>{const c=s.candidates.find(x=>x.player_id===p.id);if(c)all.push(c.race_score)}));const min=Math.max(0,Math.min(...all)-5),max=Math.min(100,Math.max(...all)+5);const y=v=>H-pad-(H-2*pad)*((v-min)/Math.max(1,max-min));const colors=['#81d6be','#f0b55d','#8eaeff','#de8cff','#f38b7d','#b6cf70'];
+  let svg=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  [min,(min+max)/2,max].forEach(v=>svg+=`<line class="grid" x1="${pad}" y1="${y(v)}" x2="${W-pad}" y2="${y(v)}"/><text x="3" y="${y(v)+3}">${v.toFixed(0)}</text>`);
+  players.forEach((p,pi)=>{const pts=[];snapshots.forEach((s,i)=>{const a=s.candidates.find(z=>z.player_id===p.id);if(a)pts.push({i,v:a.race_score,date:s.date})});if(pts.length){const path=pts.map((q,j)=>`${j?'L':'M'}${x(q.i)},${y(q.v)}`).join(' ');svg+=`<path class="award-line" stroke="${colors[pi]}" d="${path}"/>`;pts.forEach(q=>svg+=`<circle class="award-dot" fill="${colors[pi]}" cx="${x(q.i)}" cy="${y(q.v)}" r="3"><title>${p.name} · ${q.date} · ${q.v.toFixed(1)}</title></circle>`)}});svg+='</svg>';
+  el.innerHTML=svg+`<div class="award-legend">${players.map((p,i)=>`<div class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${p.name}</div>`).join('')}</div>`;
+}
+$('award-slider').oninput=()=>{if(!awardHistory.length)return;const snap=awardHistory[Number($('award-slider').value)];$('award-date').value=snap.date;$('award-date-label').textContent=snap.date;clearTimeout(awardTimer);awardTimer=setTimeout(loadAwardRace,90)};
+$('award-date').onchange=()=>{if(awardHistory.length){let nearest=0,best=Infinity;awardHistory.forEach((s,i)=>{const diff=Math.abs(new Date(s.date)-new Date($('award-date').value));if(diff<best){best=diff;nearest=i}});$('award-slider').value=nearest}loadAwardRace()};
+
 init();
