@@ -15,7 +15,8 @@ data = ["nba_api>=1.10,<2"]
 
 [project.scripts]
 nba-lab = "nba_lab.cli:main"
-nba-lab-sync = "nba_lab.cli:sync"\nnba-lab-sync-awards = "nba_lab.cli:sync_awards"
+nba-lab-sync = "nba_lab.cli:sync"
+nba-lab-sync-awards = "nba_lab.cli:sync_awards"
 
 [tool.setuptools.packages.find]
 where = ["src"]
