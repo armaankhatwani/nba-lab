@@ -16,7 +16,7 @@
       <div class="nav-section">NEXT LABS</div>
       <button class="nav-item" data-view="awards"><span>★</span>Awards Lab</button>
       <button class="nav-item" data-view="impact"><span>±</span>Player Impact</button>
-      <button class="nav-item future" data-view="lineup"><span>⬡</span>Lineup Lab</button>
+      <button class="nav-item" data-view="lineup"><span>⬡</span>Lineup Lab</button>
       <button class="nav-item future" data-view="game"><span>▶</span>Game Replay</button>
     </nav>
     <div class="sidebar-foot"><div id="source-dot" class="dot"></div><div><strong id="source-short">Loading data…</strong><span id="source-detail"></span></div></div>
@@ -101,7 +101,18 @@
         </div>
         <div class="panel impact-scatter-panel"><div class="section-head"><div><span class="eyebrow">EXPOSURE VS ESTIMATE</span><h2>Impact becomes more trustworthy with minutes behind it.</h2></div><span>hover points for player context</span></div><div id="impact-scatter" class="chart impact-scatter"></div></div>
       </section>
-      <section class="view future-view" id="view-lineup"><span class="eyebrow">PLANNED MODULE</span><h2>Lineup Lab</h2><p>Build a five-man unit, estimate offense/defense/net with uncertainty, and inspect interactions that are supported by enough data.</p></section>
+      <section class="view" id="view-lineup">
+        <div class="lineup-toolbar panel">
+          <div><span class="eyebrow">LINEUP LAB / RAPM PRIOR + OBSERVED UNIT</span><h2>Build the five.</h2><p>Unseen units fall back to the additive player-impact prior; real lineup possessions pull the estimate toward what actually happened.</p></div>
+          <div class="lineup-settings"><label>Ridge α<select id="lineup-alpha"><option value="100">100</option><option value="300">300</option><option value="1000" selected>1000</option><option value="3000">3000</option></select></label><label>Observed prior<select id="lineup-prior"><option value="100">100 poss</option><option value="300" selected>300 poss</option><option value="600">600 poss</option></select></label></div>
+        </div>
+        <div class="lineup-builder">
+          <div class="panel lineup-side-card" id="lineup-a-card"><div class="lineup-side-head"><span class="eyebrow">LINEUP A</span><strong id="lineup-a-value">—</strong></div><div class="court"><div class="court-key"></div><div id="lineup-a-slots" class="lineup-slots"></div></div><div id="lineup-a-meta" class="lineup-meta">Choose five players.</div></div>
+          <div class="lineup-versus-panel"><span>NEUTRAL-COURT MARGIN</span><strong id="lineup-margin">—</strong><small id="lineup-margin-note">select ten unique players</small><button class="primary" id="lineup-run">COMPARE LINEUPS ↗</button><button class="ghost-button" id="lineup-swap">SWAP SIDES ⇄</button></div>
+          <div class="panel lineup-side-card" id="lineup-b-card"><div class="lineup-side-head"><span class="eyebrow">LINEUP B</span><strong id="lineup-b-value">—</strong></div><div class="court"><div class="court-key"></div><div id="lineup-b-slots" class="lineup-slots"></div></div><div id="lineup-b-meta" class="lineup-meta">Choose five players.</div></div>
+        </div>
+        <div class="panel player-pool-panel"><div class="section-head"><div><span class="eyebrow">PLAYER POOL</span><h2>Click a player, then assign a side.</h2></div><div class="pool-controls"><input id="lineup-search" class="table-search" placeholder="Search player / team"><select id="lineup-team-filter"><option value="">All teams</option></select></div></div><div id="lineup-player-pool" class="lineup-player-pool"></div></div>
+      </section>
       <section class="view future-view" id="view-game"><span class="eyebrow">PLANNED MODULE</span><h2>Game Replay</h2><p>Open a historical game at a chosen possession, alter the lineup or event, and simulate forward from that exact state.</p></section>
     </main>
   </div>
