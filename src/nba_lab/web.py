@@ -357,6 +357,7 @@ def impact(alpha: float = 1000.0, limit: int = 100):
         "weighted_rmse": result.weighted_rmse,
         "stints": len(IMPACT_SNAPSHOT.stints),
         "games": len({stint.game_id for stint in IMPACT_SNAPSHOT.stints}),
+        "qa": IMPACT_SNAPSHOT.qa,
         "players": rows,
         "warning": "RAPM is a regularized association estimate, not a causal player-value truth.",
     }
