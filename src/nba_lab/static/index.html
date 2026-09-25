@@ -15,7 +15,7 @@
       <button class="nav-item" data-view="model"><span>◎</span>Model Lab</button>
       <div class="nav-section">NEXT LABS</div>
       <button class="nav-item" data-view="awards"><span>★</span>Awards Lab</button>
-      <button class="nav-item future" data-view="impact"><span>±</span>Player Impact<em>NEXT</em></button>
+      <button class="nav-item" data-view="impact"><span>±</span>Player Impact</button>
       <button class="nav-item future" data-view="lineup"><span>⬡</span>Lineup Lab</button>
       <button class="nav-item future" data-view="game"><span>▶</span>Game Replay</button>
     </nav>
@@ -89,7 +89,18 @@
         <div class="panel award-futures"><div class="section-head"><div><span class="eyebrow">SIMULATED FINISH</span><h2>Who ends up leading?</h2></div><span id="award-future-note">run remaining-season simulation</span></div><div id="award-future-bars" class="award-future-bars empty"><span>Simulate alternate season endings to connect the award race to team and player futures.</span></div></div>
         <div class="panel award-history"><div class="section-head"><div><span class="eyebrow">RACE HISTORY</span><h2>Who led, and when?</h2></div><span>weekly snapshots · hover points for score</span></div><div id="award-history-chart" class="chart awards-chart"></div></div>
       </section>
-      <section class="view future-view" id="view-impact"><span class="eyebrow">NEXT MODULE</span><h2>Player Impact</h2><p>Possession/stint data → regularized adjusted plus-minus → uncertainty → player-aware season counterfactuals.</p></section>
+      <section class="view" id="view-impact">
+        <div class="impact-toolbar panel">
+          <div><span class="eyebrow">PLAYER IMPACT / RAPM</span><h2>Separate player from lineup context.</h2><p>Weighted ridge regression credits each player while adjusting for the other nine players on the floor.</p></div>
+          <div class="impact-controls"><label>Ridge α<select id="impact-alpha"><option value="100">100</option><option value="300">300</option><option value="1000" selected>1000</option><option value="3000">3000</option></select></label><span id="impact-source">Loading…</span></div>
+        </div>
+        <div class="metric-grid impact-metrics"><article class="panel metric"><span>STINTS</span><strong id="impact-stints">—</strong><small>regression observations</small></article><article class="panel metric"><span>GAMES</span><strong id="impact-games">—</strong><small>distinct games</small></article><article class="panel metric"><span>HOME COURT</span><strong id="impact-home">—</strong><small>points / 100</small></article><article class="panel metric"><span>WEIGHTED RMSE</span><strong id="impact-rmse">—</strong><small>stint net rating</small></article></div>
+        <div class="impact-grid">
+          <div class="panel impact-board"><div class="section-head"><div><span class="eyebrow">RAPM BOARD</span><h2>Regularized player value</h2></div><input id="impact-search" class="table-search" placeholder="Filter player / team"></div><div class="scroll impact-scroll"><table><thead><tr><th>Rank</th><th>Player</th><th>Team</th><th>RAPM / 100</th><th>Possessions</th></tr></thead><tbody id="impact-rows"></tbody></table></div></div>
+          <div class="panel impact-detail"><span class="eyebrow">REGULARIZATION STABILITY</span><h2 id="impact-detail-name">Select a player</h2><p id="impact-detail-meta">How much does the estimate survive stronger shrinkage?</p><div id="impact-path-chart" class="chart impact-path-chart"></div><div class="warning-box"><strong>INTERPRETATION</strong><span>RAPM adjusts for who shared the floor, but it remains an association estimate with large single-season uncertainty.</span></div></div>
+        </div>
+        <div class="panel impact-scatter-panel"><div class="section-head"><div><span class="eyebrow">EXPOSURE VS ESTIMATE</span><h2>Impact becomes more trustworthy with minutes behind it.</h2></div><span>hover points for player context</span></div><div id="impact-scatter" class="chart impact-scatter"></div></div>
+      </section>
       <section class="view future-view" id="view-lineup"><span class="eyebrow">PLANNED MODULE</span><h2>Lineup Lab</h2><p>Build a five-man unit, estimate offense/defense/net with uncertainty, and inspect interactions that are supported by enough data.</p></section>
       <section class="view future-view" id="view-game"><span class="eyebrow">PLANNED MODULE</span><h2>Game Replay</h2><p>Open a historical game at a chosen possession, alter the lineup or event, and simulate forward from that exact state.</p></section>
     </main>
