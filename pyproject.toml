@@ -11,6 +11,7 @@ dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "pydantic>=2.10,<3"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
+data = ["nba_api>=1.10,<2"]
 
 [project.scripts]
 nba-lab = "nba_lab.cli:main"
