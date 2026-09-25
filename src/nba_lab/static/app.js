@@ -49,7 +49,9 @@ async function loadImpact(){
   $('impact-games').textContent=d.games.toLocaleString();
   $('impact-home').textContent=d.home_court_per_100.toFixed(2);
   $('impact-rmse').textContent=d.weighted_rmse.toFixed(2);
-  $('impact-source').textContent=d.source?.kind==='normalized_snapshot'?'NORMALIZED REAL STINTS':'SYNTHETIC STINTS';
+  const kept=d.qa?.possessions_kept,seen=d.qa?.possessions_seen;
+  const qa=(kept!=null&&seen)?` · kept ${kept.toLocaleString()}/${seen.toLocaleString()}`:'';
+  $('impact-source').textContent=(d.source?.kind==='normalized_snapshot'?'NORMALIZED REAL STINTS':'SYNTHETIC STINTS')+qa;
   renderImpactRows(d.players);
   drawImpactScatter(d.players);
   if(d.players[0])loadImpactPath(d.players[0].player_id);
