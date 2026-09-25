@@ -96,3 +96,20 @@ def test_player_impact_and_regularization_path_api():
     assert path.status_code == 200
     points = path.json()['points']
     assert [p['alpha'] for p in points] == [100.0, 300.0, 1000.0, 3000.0]
+
+
+def test_lineup_players_and_compare_api():
+    players = client.get('/api/lineup/players?alpha=1000').json()['players']
+    assert len(players) >= 10
+    a = [p['player_id'] for p in players[:5]]
+    b = [p['player_id'] for p in players[5:10]]
+    if set(a) & set(b):
+        raise AssertionError('test fixture lineups overlap')
+    r = client.post('/api/lineup/compare', json={
+        'lineup_a': a, 'lineup_b': b, 'alpha': 1000, 'prior_possessions': 300
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data['lineup_a']['player_meta']) == 5
+    assert len(data['lineup_b']['player_meta']) == 5
+    assert isinstance(data['neutral_margin_per_100'], float)
