@@ -47,4 +47,5 @@ def synthetic_impact_snapshot(seed:int=2026)->ImpactSnapshot:
         stints=tuple(stints),
         players=players,
         source="synthetic_impact_demo",
+        qa={"possessions_seen": len(stints), "possessions_kept": len(stints), "possessions_skipped": 0},
     )
