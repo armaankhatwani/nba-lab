@@ -1,5 +1,6 @@
 from dataclasses import asdict
-from datetime import date
+from datetime import date, timedelta
+from functools import lru_cache
 import os
 from pathlib import Path
 
@@ -9,9 +10,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .analysis import compare_counterfactual
+from .awards import build_award_race
+from .awards_source import load_player_logs
 from .backtest import chronological_backtest
 from .branch import compare_game_flip
 from .demo import synthetic_demo_games
+from .demo_awards import synthetic_player_games
 from .diagnostics import calibration_curve
 from .matchup import simulate_matchup
 from .source import load_snapshot
@@ -36,6 +40,28 @@ def _load_games():
 
 
 GAMES, SOURCE = _load_games()
+
+
+def _load_award_logs():
+    configured = os.environ.get("NBA_LAB_AWARDS_SNAPSHOT")
+    candidates = [Path(configured)] if configured else [Path("data/playerGameLogs.json")]
+    for path in candidates:
+        if path and path.exists():
+            return load_player_logs(path), {"kind": "official_snapshot", "path": str(path)}
+    return synthetic_player_games(GAMES), {
+        "kind": "synthetic_demo",
+        "warning": "Synthetic star logs for offline Awards Lab testing. Run nba-lab-sync-awards for real NBA data.",
+    }
+
+
+AWARD_LOGS, AWARD_SOURCE = _load_award_logs()
+
+
+@lru_cache(maxsize=256)
+def _award_race(as_of: date):
+    return build_award_race(GAMES, AWARD_LOGS, as_of)
+
+
 app = FastAPI(title="NBA Lab", version="0.1.0")
 
 
@@ -78,6 +104,8 @@ def status():
         "date_min": min(dates).isoformat(),
         "date_max": max(dates).isoformat(),
         "team_metadata": {code: asdict(info) for code, info in TEAMS.items()},
+        "awards_source": AWARD_SOURCE,
+        "award_logs": len(AWARD_LOGS),
     }
 
 
@@ -166,6 +194,61 @@ def flip_game_result(request: FlipRequest):
             "label": "historical result branch",
         },
     }
+
+
+@app.get("/api/awards/race")
+def awards_race(as_of: date, limit: int = 10):
+    race = _award_race(as_of)
+    return {
+        "as_of": race.as_of.isoformat(),
+        "award": race.award,
+        "source": AWARD_SOURCE,
+        "candidates": [asdict(candidate) for candidate in race.candidates[: max(1, min(limit, 25))]],
+    }
+
+
+@app.get("/api/awards/history")
+def awards_history(step_days: int = 7, limit: int = 6):
+    step_days = max(1, min(step_days, 31))
+    limit = max(1, min(limit, 12))
+    dates = sorted({row.game_date for row in AWARD_LOGS})
+    if not dates:
+        return {"source": AWARD_SOURCE, "snapshots": []}
+    start, end = dates[0], dates[-1]
+    cursor = start
+    snapshots = []
+    while cursor <= end:
+        race = _award_race(cursor)
+        snapshots.append({
+            "date": cursor.isoformat(),
+            "candidates": [
+                {
+                    "player_id": c.player_id,
+                    "player_name": c.player_name,
+                    "team": c.team,
+                    "race_score": c.race_score,
+                    "race_share": c.race_share,
+                }
+                for c in race.candidates[:limit]
+            ],
+        })
+        cursor += timedelta(days=step_days)
+    if snapshots and snapshots[-1]["date"] != end.isoformat():
+        race = _award_race(end)
+        snapshots.append({
+            "date": end.isoformat(),
+            "candidates": [
+                {
+                    "player_id": c.player_id,
+                    "player_name": c.player_name,
+                    "team": c.team,
+                    "race_score": c.race_score,
+                    "race_share": c.race_share,
+                }
+                for c in race.candidates[:limit]
+            ],
+        })
+    return {"source": AWARD_SOURCE, "snapshots": snapshots}
 
 
 @app.post("/api/matchup")
