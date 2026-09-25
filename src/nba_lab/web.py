@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from .analysis import compare_counterfactual
 from .backtest import chronological_backtest
+from .branch import compare_game_flip
 from .demo import synthetic_demo_games
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
@@ -44,6 +45,10 @@ class SimRequest(BaseModel):
 class CompareRequest(SimRequest):
     team: str
     elo_delta: float = Field(ge=-300, le=300)
+
+
+class FlipRequest(SimRequest):
+    game_id: str
 
 
 def _serialize(result):
@@ -98,6 +103,58 @@ def compare(request: CompareRequest):
             "elo_delta": request.elo_delta,
             "label": "research strength adjustment",
             "warning": "This is not a player/trade effect. Player-aware interventions are a future validated layer.",
+        },
+    }
+
+
+@app.get("/api/games")
+def games(before: date, team: str | None = None, limit: int = 40):
+    rows = [
+        game
+        for game in GAMES
+        if game.is_final
+        and game.game_date < before
+        and (team is None or team in {game.home_team, game.away_team})
+    ]
+    rows.sort(key=lambda game: (game.game_date, game.game_id), reverse=True)
+    return [
+        {
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+            "home_score": game.home_score,
+            "away_score": game.away_score,
+            "winner": game.winner,
+        }
+        for game in rows[: max(1, min(limit, 100))]
+    ]
+
+
+@app.post("/api/flip-game")
+def flip_game_result(request: FlipRequest):
+    try:
+        result = compare_game_flip(
+            GAMES, request.game_id, request.as_of, trials=request.trials, seed=request.seed
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    target = next(game for game in GAMES if game.game_id == request.game_id)
+    return {
+        "baseline": _serialize(result.baseline),
+        "altered": _serialize(result.altered),
+        "deltas": [asdict(delta) for delta in result.deltas],
+        "intervention": {
+            "kind": "flip_game",
+            "game_id": result.game_id,
+            "date": target.game_date.isoformat(),
+            "home_team": target.home_team,
+            "away_team": target.away_team,
+            "home_score": target.home_score,
+            "away_score": target.away_score,
+            "original_winner": result.original_winner,
+            "flipped_winner": result.flipped_winner,
+            "label": "historical result branch",
         },
     }
 
