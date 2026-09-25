@@ -86,3 +86,25 @@ def sync_impact():
         f"Wrote {len(payload['stints']):,} impact observations to {args.output}; "
         f"kept {qa.get('possessions_kept', 0):,} / {qa.get('possessions_seen', 0):,} possessions"
     )
+
+
+def sync_replay():
+    """Freeze official NBA PlayByPlayV3 snapshots for selected games."""
+    parser = argparse.ArgumentParser(prog="nba-lab-sync-replay")
+    parser.add_argument("--game-id", action="append", required=True, help="NBA game id; repeat for multiple games")
+    parser.add_argument("--output-dir", default="data/replay")
+    args = parser.parse_args()
+    try:
+        from nba_api.stats.endpoints import PlayByPlayV3
+    except ImportError as exc:
+        raise SystemExit("Install the data extra first: pip install -e '.[data]'") from exc
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for game_id in args.game_id:
+        endpoint = PlayByPlayV3(game_id=game_id, timeout=60)
+        payload = endpoint.get_normalized_dict()
+        content = json.dumps(payload, indent=2).encode()
+        target = output_dir / f"{game_id}.json"
+        target.write_bytes(content)
+        print(f"Wrote {len(content):,} bytes to {target}")
