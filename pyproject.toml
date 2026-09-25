@@ -18,7 +18,8 @@ impact = ["pbpstats>=1.3.11,<2"]
 nba-lab = "nba_lab.cli:main"
 nba-lab-sync = "nba_lab.cli:sync"
 nba-lab-sync-awards = "nba_lab.cli:sync_awards"
-nba-lab-sync-impact = "nba_lab.cli:sync_impact"\nnba-lab-sync-replay = "nba_lab.cli:sync_replay"
+nba-lab-sync-impact = "nba_lab.cli:sync_impact"
+nba-lab-sync-replay = "nba_lab.cli:sync_replay"
 
 [tool.setuptools.packages.find]
 where = ["src"]
