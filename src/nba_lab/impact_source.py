@@ -20,6 +20,7 @@ class ImpactSnapshot:
     stints: tuple[Stint, ...]
     players: dict[str, ImpactPlayer]
     source: str
+    qa: dict[str, int]
 
 
 def parse_impact_snapshot(payload: dict[str, Any]) -> ImpactSnapshot:
@@ -59,6 +60,7 @@ def parse_impact_snapshot(payload: dict[str, Any]) -> ImpactSnapshot:
         stints=tuple(stints),
         players=players,
         source=str(payload.get("source") or "normalized_stints"),
+        qa={str(k): int(v) for k, v in (payload.get("qa") or {}).items()},
     )
 
 
