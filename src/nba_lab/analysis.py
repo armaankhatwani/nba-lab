@@ -10,6 +10,27 @@ class TeamDelta:
     team: str
     expected_wins_delta: float
     first_seed_probability_delta: float
+    top6_probability_delta: float
+    playin_probability_delta: float
+    playoffs_probability_delta: float
+    championship_probability_delta: float
+
+
+def build_team_deltas(baseline: SimulationResult, altered: SimulationResult) -> tuple[TeamDelta, ...]:
+    left = {x.team: x for x in baseline.teams}
+    right = {x.team: x for x in altered.teams}
+    return tuple(
+        TeamDelta(
+            team=team,
+            expected_wins_delta=right[team].expected_wins - left[team].expected_wins,
+            first_seed_probability_delta=right[team].first_seed_probability - left[team].first_seed_probability,
+            top6_probability_delta=right[team].top6_probability - left[team].top6_probability,
+            playin_probability_delta=right[team].playin_probability - left[team].playin_probability,
+            playoffs_probability_delta=right[team].playoffs_probability - left[team].playoffs_probability,
+            championship_probability_delta=right[team].championship_probability - left[team].championship_probability,
+        )
+        for team in sorted(left)
+    )
 
 
 @dataclass(frozen=True)
@@ -26,11 +47,7 @@ def compare_counterfactual(
     trials: int = 10_000,
     seed: int = 2026,
 ) -> CounterfactualComparison:
-    """Compare baseline and intervention with common random numbers.
-
-    Using the same seed in both worlds sharply reduces Monte Carlo noise in the
-    *difference*, which is what a counterfactual UI actually needs to display.
-    """
+    """Compare baseline and intervention with common random numbers."""
     baseline = simulate_remaining_season(games, as_of, trials=trials, seed=seed)
     altered = simulate_remaining_season(
         games,
@@ -39,16 +56,8 @@ def compare_counterfactual(
         seed=seed,
         rating_adjustments=rating_adjustments,
     )
-    left = {x.team: x for x in baseline.teams}
-    right = {x.team: x for x in altered.teams}
-    deltas = tuple(
-        TeamDelta(
-            team=team,
-            expected_wins_delta=right[team].expected_wins - left[team].expected_wins,
-            first_seed_probability_delta=(
-                right[team].first_seed_probability - left[team].first_seed_probability
-            ),
-        )
-        for team in sorted(left)
+    return CounterfactualComparison(
+        baseline=baseline,
+        altered=altered,
+        deltas=build_team_deltas(baseline, altered),
     )
-    return CounterfactualComparison(baseline=baseline, altered=altered, deltas=deltas)
