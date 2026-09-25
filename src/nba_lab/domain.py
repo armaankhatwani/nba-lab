@@ -33,3 +33,5 @@ class TeamForecast:
     p10_wins: int
     p90_wins: int
     first_seed_probability: float
+    top6_probability: float
+    playin_probability: float
