@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoade
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
-const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['NBA LAB / SEASON LAB','Rewrite the season.'],matchup:['NBA LAB / MATCHUP LAB','Run the matchup.'],timeline:['NBA LAB / TIMELINE LAB','Replay how a team changed.'],model:['NBA LAB / MODEL LAB','Trust the model, then improve it.'],awards:['NBA LAB / AWARDS LAB','Replay the award race.'],impact:['NBA LAB / PLAYER IMPACT','Separate player from context.'],lineup:['NBA LAB / LINEUP LAB','Build the five.'],game:['NBA LAB / GAME REPLAY','Rewrite the possession.']};
+const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['NBA LAB / SEASON LAB','Rewrite the season.'],matchup:['NBA LAB / MATCHUP LAB','Run the matchup.'],timeline:['NBA LAB / TIMELINE LAB','Replay how a team changed.'],model:['NBA LAB / MODEL LAB','Trust the model, then improve it.'],awards:['NBA LAB / AWARDS LAB','Replay the award race.'],impact:['NBA LAB / PLAYER IMPACT','Separate player from context.'],lineup:['NBA LAB / LINEUP LAB','Build the five.'],leverage:['NBA LAB / LEVERAGE LAB','Find the pivotal game.'],game:['NBA LAB / GAME REPLAY','Rewrite the possession.']};
 function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards();if(name==='impact')loadImpact();if(name==='lineup')loadLineup()}
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>openView(b.dataset.view));document.querySelectorAll('[data-open]').forEach(c=>c.onclick=()=>openView(c.dataset.open));
 async function loadGames(){const team=$('game-team').value;const q=new URLSearchParams({before:$('asof').value,limit:'50'});if(team)q.set('team',team);const games=await json('/api/games?'+q);$('game').replaceChildren();games.forEach(g=>{const o=document.createElement('option');o.value=g.game_id;o.textContent=`${g.date} · ${g.away_team} ${g.away_score} @ ${g.home_team} ${g.home_score}`;$('game').append(o)});if(!games.length){const o=document.createElement('option');o.textContent='No completed games before this date';$('game').append(o)}}
@@ -41,6 +41,38 @@ async function loadDiagnostics(){if(diagnosticsLoaded)return;const d=await json(
 function drawCalibration(points){const el=$('calibration-chart'),W=600,H=250,pad=34;const x=v=>pad+(W-2*pad)*v,y=v=>H-pad-(H-2*pad)*v;const path=points.map((p,i)=>`${i?'L':'M'}${x(p.mean_prediction)},${y(p.actual_rate)}`).join(' ');el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="grid" x1="${pad}" y1="${y(.5)}" x2="${W-pad}" y2="${y(.5)}"/><line class="grid" x1="${x(.5)}" y1="${pad}" x2="${x(.5)}" y2="${H-pad}"/><line class="ideal" x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}"/><path class="cal-line" d="${path}"/>${points.map(p=>`<circle class="point win" cx="${x(p.mean_prediction)}" cy="${y(p.actual_rate)}" r="${Math.max(4,Math.min(9,Math.sqrt(p.count)))}"><title>${(p.mean_prediction*100).toFixed(1)}% predicted · ${(p.actual_rate*100).toFixed(1)}% observed · n=${p.count}</title></circle>`).join('')}<text x="${pad}" y="${H-6}">0%</text><text x="${W-pad-18}" y="${H-6}">100%</text><text x="4" y="${pad+3}">100%</text><text x="4" y="${H-pad+3}">0%</text></svg>`}
 
 
+
+
+$('leverage-run').onclick=async()=>{
+  const button=$('leverage-run');button.disabled=true;$('lev-status').textContent='branching upcoming games…';
+  try{
+    const q=new URLSearchParams({
+      as_of:$('leverage-date').value,
+      trials:$('leverage-trials').value,
+      limit:$('leverage-limit').value,
+    });
+    const d=await json('/api/leverage?'+q);
+    const rows=d.games||[];
+    if(!rows.length){$('lev-status').textContent='no upcoming games';return}
+    const top=rows[0];
+    $('lev-top-game').textContent=`${top.away_team} @ ${top.home_team}`;
+    $('lev-title-shift').textContent=pct(top.title_distribution_shift);
+    $('lev-playoff-shift').textContent=pct(top.playoff_distribution_shift);
+    $('lev-team-swing').textContent=top.biggest_title_swing_team?`${top.biggest_title_swing_team} ${top.biggest_title_swing>=0?'+':''}${(top.biggest_title_swing*100).toFixed(1)} pts`:'—';
+    const max=Math.max(...rows.map(r=>r.title_distribution_shift),.001);
+    $('leverage-rows').innerHTML=rows.map((r,i)=>`<div class="leverage-row">
+      <div class="leverage-rank">${String(i+1).padStart(2,'0')}</div>
+      <div class="leverage-game"><strong>${r.away_team} @ ${r.home_team}</strong><span>${r.game_date}</span></div>
+      <div class="leverage-track"><div class="leverage-fill" style="width:${100*r.title_distribution_shift/max}%"></div></div>
+      <div class="leverage-cell"><span>TITLE SHIFT</span><strong>${pct(r.title_distribution_shift)}</strong></div>
+      <div class="leverage-cell"><span>PLAYOFF SHIFT</span><strong>${pct(r.playoff_distribution_shift)}</strong></div>
+      <div class="leverage-cell leverage-swing"><span>BIGGEST TITLE SWING</span><strong>${r.biggest_title_swing_team||'—'} ${r.biggest_title_swing_team?(r.biggest_title_swing>=0?'+':'')+(r.biggest_title_swing*100).toFixed(1)+' pts':''}</strong></div>
+    </div>`).join('');
+    $('lev-status').textContent=`${rows.length} games · ${Number(d.trials_per_world).toLocaleString()} trials per branch`;
+  }catch(e){
+    $('lev-status').textContent=e.message;
+  }finally{button.disabled=false}
+};
 
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
