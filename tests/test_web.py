@@ -73,3 +73,13 @@ def test_awards_race_and_history_api():
     history = client.get('/api/awards/history?step_days=14&limit=4')
     assert history.status_code == 200
     assert history.json()['snapshots']
+
+
+def test_awards_simulation_api_returns_distribution():
+    r = client.post('/api/awards/simulate', json={
+        'as_of': '2026-01-15', 'trials': 100, 'seed': 5
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data['candidates']
+    assert abs(sum(c['leader_probability'] for c in data['candidates']) - 1) < 1e-9
