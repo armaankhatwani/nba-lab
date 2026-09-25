@@ -24,10 +24,10 @@ The model is deliberately simple today. Complexity has to earn promotion through
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e '.[dev]'
+pip install -e '.[dev,data]'
 
-# Optional but recommended: freeze real NBA schedule/results from the official feed.
-nba-lab-sync
+# Recommended for the historical demo: freeze the completed 2025-26 season.
+nba-lab-sync --season 2025-26
 
 nba-lab
 ```
