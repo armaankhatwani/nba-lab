@@ -63,7 +63,7 @@ def total_seconds_remaining(period: int, clock_seconds: float) -> float:
 
 def historical_margin_sigma(games: list[Game], as_of: date, fallback: float = 12.0) -> float:
     margins = [
-        abs(int(game.home_score) - int(game.away_score))
+        int(game.home_score) - int(game.away_score)
         for game in games
         if game.is_final and game.game_date < as_of
     ]
