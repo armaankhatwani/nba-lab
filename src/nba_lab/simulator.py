@@ -31,9 +31,7 @@ def _observed_records(games: list[Game], as_of: date):
 def _seed_groups(teams: list[str], wins: dict[str, int], rng: random.Random):
     """Return seed order by conference with randomized tie resolution.
 
-    This is intentionally not presented as official NBA tiebreaker logic yet.
-    Randomized ties keep probability mass honest until head-to-head/division
-    tiebreakers are modeled explicitly.
+    Official head-to-head/division/conference tiebreakers are not implemented yet.
     """
     by_conf: dict[str, list[str]] = defaultdict(list)
     for team in teams:
@@ -43,6 +41,61 @@ def _seed_groups(teams: list[str], wins: dict[str, int], rng: random.Random):
         jitter = {team: rng.random() for team in members}
         result[conference] = sorted(members, key=lambda team: (-wins[team], jitter[team]))
     return result
+
+
+def _single_game(home: str, away: str, ratings, model: EloModel, rng: random.Random) -> str:
+    p_home = model.win_probability(ratings[home], ratings[away])
+    return home if rng.random() < p_home else away
+
+
+def _series(higher: str, lower: str, ratings, model: EloModel, rng: random.Random) -> str:
+    pattern = [higher, higher, lower, lower, higher, lower, higher]
+    wins = {higher: 0, lower: 0}
+    for home in pattern:
+        away = lower if home == higher else higher
+        winner = _single_game(home, away, ratings, model, rng)
+        wins[winner] += 1
+        if wins[winner] == 4:
+            return winner
+    raise RuntimeError("best-of-seven series did not terminate")
+
+
+def _conference_playoffs(order: list[str], ratings, model: EloModel, rng: random.Random):
+    if len(order) < 10:
+        return [], None
+    top6 = order[:6]
+    seven, eight, nine, ten = order[6:10]
+    seven_eight_winner = _single_game(seven, eight, ratings, model, rng)
+    seven_eight_loser = eight if seven_eight_winner == seven else seven
+    nine_ten_winner = _single_game(nine, ten, ratings, model, rng)
+    eighth_seed = _single_game(seven_eight_loser, nine_ten_winner, ratings, model, rng)
+    seeds = top6 + [seven_eight_winner, eighth_seed]
+
+    qf = [
+        _series(seeds[0], seeds[7], ratings, model, rng),
+        _series(seeds[3], seeds[4], ratings, model, rng),
+        _series(seeds[2], seeds[5], ratings, model, rng),
+        _series(seeds[1], seeds[6], ratings, model, rng),
+    ]
+    sf1 = _series(qf[0], qf[1], ratings, model, rng)
+    sf2 = _series(qf[2], qf[3], ratings, model, rng)
+    champion = _series(sf1, sf2, ratings, model, rng)
+    return seeds, champion
+
+
+def _simulate_postseason(orders, wins, ratings, model: EloModel, rng: random.Random):
+    east_seeds, east = _conference_playoffs(orders.get("East", []), ratings, model, rng)
+    west_seeds, west = _conference_playoffs(orders.get("West", []), ratings, model, rng)
+    playoff_teams = east_seeds + west_seeds
+    if not east or not west:
+        return playoff_teams, None
+    if wins[east] > wins[west]:
+        higher, lower = east, west
+    elif wins[west] > wins[east]:
+        higher, lower = west, east
+    else:
+        higher, lower = (east, west) if rng.random() < 0.5 else (west, east)
+    return playoff_teams, _series(higher, lower, ratings, model, rng)
 
 
 def simulate_remaining_season(
@@ -68,11 +121,12 @@ def simulate_remaining_season(
     first_seed = defaultdict(float)
     top6 = defaultdict(float)
     playin = defaultdict(float)
+    playoffs = defaultdict(float)
+    championships = defaultdict(float)
     for _ in range(trials):
         wins = {team: observed_wins[team] for team in teams}
         for game in future:
-            p_home = model.win_probability(ratings[game.home_team], ratings[game.away_team])
-            winner = game.home_team if rng.random() < p_home else game.away_team
+            winner = _single_game(game.home_team, game.away_team, ratings, model, rng)
             wins[winner] += 1
 
         orders = _seed_groups(teams, wins, rng)
@@ -83,6 +137,12 @@ def simulate_remaining_season(
                 top6[team] += 1
             for team in order[6:10]:
                 playin[team] += 1
+
+        playoff_teams, champion = _simulate_postseason(orders, wins, ratings, model, rng)
+        for team in playoff_teams:
+            playoffs[team] += 1
+        if champion:
+            championships[champion] += 1
         for team in teams:
             win_samples[team].append(wins[team])
 
@@ -102,6 +162,8 @@ def simulate_remaining_season(
                 first_seed_probability=first_seed[team] / trials,
                 top6_probability=top6[team] / trials,
                 playin_probability=playin[team] / trials,
+                playoffs_probability=playoffs[team] / trials,
+                championship_probability=championships[team] / trials,
             )
         )
     forecasts.sort(key=lambda x: (-x.expected_wins, x.team))
