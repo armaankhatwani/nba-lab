@@ -35,3 +35,5 @@ class TeamForecast:
     first_seed_probability: float
     top6_probability: float
     playin_probability: float
+    playoffs_probability: float
+    championship_probability: float
