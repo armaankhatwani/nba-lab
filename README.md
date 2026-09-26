@@ -4,7 +4,7 @@
 
 NBA Lab is a point-in-time basketball simulation and counterfactual analysis system. Pick an as-of date, reconstruct the league using only information available by that point, change one or more facts, and replay the consequences through the rest of the season.
 
-The current signature interaction is **Scenario Lab**: combine a historical game flip, player absences, and a RAPM-backed player-for-player trade in one alternate world, then measure the ripple through expected wins, playoff/title distributions, and simulated MVP finishes.
+The current signature interaction is **Scenario Lab**: combine a historical game flip, a forced upcoming result, player absences, and a RAPM-backed player-for-player trade in one alternate world, then measure the ripple through expected wins, playoff/title distributions, pivotal-game rankings, and simulated MVP finishes.
 
 ## Why this is not another stats dashboard
 
@@ -23,7 +23,7 @@ Complexity has to earn promotion through chronological evaluation or by unlockin
 ## Live labs
 
 - **Season Lab** — simulate the remaining regular season, play-in, playoffs, Finals, and historical game-result branches.
-- **Scenario Lab** — compose history, availability, and RAPM-backed trade interventions; compare season distributions; propagate the same world into MVP futures; copy a reproducible scenario link.
+- **Scenario Lab** — compose history, future results, availability, and RAPM-backed trade interventions; compare season distributions; propagate the same world into MVP futures and leverage rankings; copy a reproducible scenario link.
 - **Matchup Lab** — simulate one game or a best-of-3/5/7 from a frozen point-in-time team state.
 - **Timeline Lab** — replay a team's rating and record game by game.
 - **Model Lab** — inspect chronological Brier score, log loss, accuracy, calibration, and the promotion baseline.
@@ -55,14 +55,17 @@ Without local snapshots, NBA Lab uses clearly labeled deterministic synthetic fi
 Scenario Lab currently supports:
 
 - zero or one completed historical game flip before the cutoff;
+- zero or one forced upcoming game result in the current UI (the engine supports a list);
 - up to three explicit player absences;
 - zero or one player-for-player trade;
 - stated missed games, modeled minutes, and replacement RAPM;
 - game-specific Elo-equivalent adjustments derived from RAPM impact;
 - paired season simulation;
+- scenario-aware pivotal-game re-ranking, with fixed games removed from the uncertainty board;
 - point-in-time MVP race ripple from altered history;
 - optional simulated MVP-finish comparison under the same scenario;
-- versioned share links that restore the full composer.
+- versioned share links that restore the full composer;
+- a Leverage → Scenario handoff that can force either side of a pivotal upcoming game.
 
 A traded player cannot also be marked absent in the same scenario yet because the timing semantics would be ambiguous.
 
