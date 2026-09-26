@@ -114,7 +114,70 @@ async function loadReplayGame(){
 function replayClock(seconds){
   const s=Math.max(0,Math.round(seconds));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 }
-function replayPeriod(period){return period<=4?`Q${period}`:`OT${period-4}`}
+function replayPeriod(period){return period<=4?'Q'+period:'OT'+(period-4)}
+function jumpReplayAction(actionNumber){
+  if(!replayData?.events?.length)return;
+  const index=replayData.events.findIndex(function(event){return Number(event.action_number)===Number(actionNumber)});
+  if(index<0)return;
+  replayIndex=index;
+  renderReplayEvent();
+  clearReplayResults();
+}
+function renderReplayTimeline(){
+  const target=$('replay-timeline-chart'),cards=$('replay-turning-points');
+  const points=replayTimelineData?.points||[],turning=replayTimelineData?.turning_points||[];
+  if(!points.length){
+    target.innerHTML='';cards.innerHTML='';
+    $('replay-timeline-status').textContent='no trace available';
+    return;
+  }
+  const W=960,H=250,padL=42,padR=18,padT=16,padB=28;
+  const x=function(i){return padL+(W-padL-padR)*(i/Math.max(1,points.length-1))};
+  const y=function(p){return padT+(H-padT-padB)*(1-p)};
+  points.forEach(function(point,i){point._cx=x(i);point._cy=y(point.home_win_probability)});
+  const line=points.map(function(point,i){return (i?'L':'M')+point._cx.toFixed(1)+','+point._cy.toFixed(1)}).join(' ');
+  const area=line+' L'+x(points.length-1).toFixed(1)+','+y(0).toFixed(1)+' L'+x(0).toFixed(1)+','+y(0).toFixed(1)+' Z';
+  const turningActions=new Set(turning.map(function(row){return Number(row.action_number)}));
+  const markers=points.filter(function(point){return turningActions.has(Number(point.action_number))}).map(function(point){
+    return '<circle class="trace-marker" data-trace-action="'+point.action_number+'" cx="'+point._cx+'" cy="'+point._cy+'" r="4"><title>'+replayPeriod(point.period)+' '+replayClock(point.clock_seconds)+' · '+pct(point.home_win_probability)+' home · swing '+(point.probability_swing>=0?'+':'')+(100*point.probability_swing).toFixed(1)+' pts</title></circle>';
+  }).join('');
+  target.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
+    +'<defs><linearGradient id="replay-trace-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#81d6be" stop-opacity=".24"/><stop offset="100%" stop-color="#81d6be" stop-opacity="0"/></linearGradient></defs>'
+    +'<line class="trace-grid" x1="'+padL+'" y1="'+y(1)+'" x2="'+(W-padR)+'" y2="'+y(1)+'"/>'
+    +'<line class="trace-mid" x1="'+padL+'" y1="'+y(.5)+'" x2="'+(W-padR)+'" y2="'+y(.5)+'"/>'
+    +'<line class="trace-grid" x1="'+padL+'" y1="'+y(0)+'" x2="'+(W-padR)+'" y2="'+y(0)+'"/>'
+    +'<path class="trace-area" d="'+area+'"/><path class="trace-line" d="'+line+'"/>'
+    +markers
+    +'<circle id="replay-trace-selected" class="trace-selected" cx="'+points[0]._cx+'" cy="'+points[0]._cy+'" r="5"/>'
+    +'<text x="2" y="'+(y(1)+3)+'">100%</text><text x="8" y="'+(y(.5)+3)+'">50%</text><text x="14" y="'+(y(0)+3)+'">0%</text>'
+    +'<text x="'+padL+'" y="'+(H-5)+'">TIP</text><text x="'+(W-padR-28)+'" y="'+(H-5)+'">FINAL</text>'
+    +'</svg>';
+  target.querySelectorAll('[data-trace-action]').forEach(function(node){node.onclick=function(){jumpReplayAction(node.dataset.traceAction)}});
+
+  cards.innerHTML=turning.map(function(row,i){
+    const swing=100*row.probability_swing;
+    const safeDescription=(row.description||'No description').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<div class="replay-turning-card" data-turn-action="'+row.action_number+'">'
+      +'<span class="turn-rank">#'+String(i+1).padStart(2,'0')+' · '+replayPeriod(row.period)+' '+replayClock(row.clock_seconds)+'</span>'
+      +'<strong>'+row.away_score+'–'+row.home_score+' · home '+pct(row.home_win_probability)+'</strong>'
+      +'<span class="turn-swing '+(swing>=0?'positive':'negative')+'">'+(swing>=0?'+':'')+swing.toFixed(1)+' pts</span>'
+      +'<span>'+(row.team||'GAME STATE')+' · '+(row.action_type||'event')+'</span>'
+      +'<small>'+safeDescription+'</small>'
+      +'</div>';
+  }).join('');
+  cards.querySelectorAll('[data-turn-action]').forEach(function(card){card.onclick=function(){jumpReplayAction(card.dataset.turnAction)}});
+  $('replay-timeline-status').textContent=points.length.toLocaleString()+' events · '+turning.length+' largest swings';
+}
+function updateReplayTraceSelection(){
+  if(!replayTimelineData?.points?.length||!replayData?.events?.length)return;
+  const event=replayData.events[replayIndex];
+  const point=replayTimelineData.points.find(function(row){return Number(row.action_number)===Number(event.action_number)});
+  const cursor=$('replay-trace-selected');
+  if(point&&cursor){
+    cursor.setAttribute('cx',point._cx);
+    cursor.setAttribute('cy',point._cy);
+  }
+}
 function clearReplayResults(){
   replayLastResult=null;
   ['replay-base-prob','replay-alt-prob','replay-prob-delta','replay-margin'].forEach(id=>$(id).textContent='—');
@@ -132,6 +195,7 @@ function renderReplayEvent(){
   $('replay-event-description').textContent=event.description||'No description';
   $('replay-event-type').textContent=[event.action_type,event.sub_type].filter(Boolean).join(' · ');
   $('replay-slider-label').textContent=`${replayIndex+1} / ${replayData.events.length}`;
+  updateReplayTraceSelection();
   const lo=Math.max(0,replayIndex-3),hi=Math.min(replayData.events.length,replayIndex+4);
   $('replay-nearby-events').innerHTML=replayData.events.slice(lo,hi).map((row,offset)=>{
     const idx=lo+offset;
