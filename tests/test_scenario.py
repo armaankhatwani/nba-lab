@@ -1,9 +1,12 @@
 from datetime import date
 
+import pytest
+
 from nba_lab.demo import synthetic_demo_games
 from nba_lab.demo_impact import synthetic_impact_snapshot
 from nba_lab.impact import fit_rapm
 from nba_lab.scenario import (
+    FutureResultIntervention,
     PlayerAbsence,
     TradeIntervention,
     build_player_absence_adjustments,
@@ -150,3 +153,50 @@ def test_trade_translation_carries_symmetric_impact_uncertainty():
     assert effect.team_a_margin_delta_low_80 <= effect.team_a_margin_delta_per_game <= effect.team_a_margin_delta_high_80
     assert effect.team_b_margin_delta_low_80 <= effect.team_b_margin_delta_per_game <= effect.team_b_margin_delta_high_80
 
+
+
+def test_future_result_intervention_forces_same_game_in_every_scenario_path():
+    games = synthetic_demo_games()
+    snapshot = synthetic_impact_snapshot()
+    rapm = fit_rapm(list(snapshot.stints), alpha=1000)
+    as_of = date(2026, 1, 15)
+    game = next(row for row in games if row.game_date >= as_of)
+    baseline = simulate_scenario(
+        games, as_of, snapshot, rapm, [], trials=500, seed=31
+    )
+    altered = simulate_scenario(
+        games,
+        as_of,
+        snapshot,
+        rapm,
+        [],
+        future_results=[FutureResultIntervention(game.game_id, game.away_team)],
+        trials=500,
+        seed=31,
+    )
+    assert altered.future_results[0].game_id == game.game_id
+    assert altered.future_results[0].forced_winner == game.away_team
+    deltas = {row.team: row for row in altered.deltas}
+    assert any(abs(row.expected_wins_delta) > 0 for row in deltas.values())
+    assert baseline.future_results == ()
+
+
+def test_future_result_rejects_past_game_and_invalid_winner():
+    games = synthetic_demo_games()
+    snapshot = synthetic_impact_snapshot()
+    rapm = fit_rapm(list(snapshot.stints), alpha=1000)
+    as_of = date(2026, 1, 15)
+    past = next(row for row in games if row.game_date < as_of)
+    with pytest.raises(ValueError, match="on or after"):
+        simulate_scenario(
+            games, as_of, snapshot, rapm, [],
+            future_results=[FutureResultIntervention(past.game_id, past.home_team)],
+            trials=20,
+        )
+    future = next(row for row in games if row.game_date >= as_of)
+    with pytest.raises(ValueError, match="not in game"):
+        simulate_scenario(
+            games, as_of, snapshot, rapm, [],
+            future_results=[FutureResultIntervention(future.game_id, "XXX")],
+            trials=20,
+        )

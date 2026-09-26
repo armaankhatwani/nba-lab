@@ -62,12 +62,18 @@ $('leverage-run').onclick=async()=>{
     const max=Math.max(...rows.map(r=>r.title_distribution_shift),.001);
     $('leverage-rows').innerHTML=rows.map((r,i)=>`<div class="leverage-row">
       <div class="leverage-rank">${String(i+1).padStart(2,'0')}</div>
-      <div class="leverage-game"><strong>${r.away_team} @ ${r.home_team}</strong><span>${r.game_date}</span></div>
+      <div class="leverage-game"><strong>${r.away_team} @ ${r.home_team}</strong><span>${r.game_date}</span><div class="leverage-branch-actions"><button data-force-leverage="${r.game_id}" data-force-winner="${r.home_team}">FORCE ${r.home_team}</button><button data-force-leverage="${r.game_id}" data-force-winner="${r.away_team}">FORCE ${r.away_team}</button></div></div>
       <div class="leverage-track"><div class="leverage-fill" style="width:${100*r.title_distribution_shift/max}%"></div></div>
       <div class="leverage-cell"><span>TITLE SHIFT</span><strong>${pct(r.title_distribution_shift)}</strong></div>
       <div class="leverage-cell"><span>PLAYOFF SHIFT</span><strong>${pct(r.playoff_distribution_shift)}</strong></div>
       <div class="leverage-cell leverage-swing"><span>BIGGEST TITLE SWING</span><strong>${r.biggest_title_swing_team||'—'} ${r.biggest_title_swing_team?(r.biggest_title_swing>=0?'+':'')+(r.biggest_title_swing*100).toFixed(1)+' pts':''}</strong></div>
     </div>`).join('');
+    document.querySelectorAll('[data-force-leverage]').forEach(function(button){
+      button.onclick=function(event){
+        event.stopPropagation();
+        openForcedResultScenario(button.dataset.forceLeverage,button.dataset.forceWinner,$('leverage-date').value);
+      };
+    });
     $('lev-status').textContent=`${rows.length} games · ${Number(d.trials_per_world).toLocaleString()} trials per branch`;
   }catch(e){
     $('lev-status').textContent=e.message;
@@ -215,6 +221,8 @@ $('replay-to-scenario').onclick=function(){
   scenarioLast=null;
   scenarioLastRequest=null;
   $('scenario-date').value=cutoff.toISOString().slice(0,10);
+  $('scenario-future-enabled').checked=false;
+  $('scenario-future-fields').hidden=true;
   $('scenario-trade-enabled').checked=false;
   $('scenario-trade-fields').hidden=true;
   pendingScenarioFlipGameId=game.game_id;
@@ -426,6 +434,24 @@ function drawImpactScatter(players){
 
 
 
+function openForcedResultScenario(gameId,winner,asOf){
+  const spec={
+    v:1,
+    request:{
+      as_of:asOf,trials:5000,seed:2026,alpha:1000,
+      flipped_game_ids:[],
+      future_results:[{game_id:gameId,winner:winner}],
+      trades:[],
+      absences:[]
+    },
+    award_trials:750,sensitivity_trials:750,leverage_trials:500,leverage_limit:10
+  };
+  const url=new URL(window.location.href);
+  url.searchParams.set('scenario',encodeScenarioSpec(spec));
+  url.hash='';
+  window.location.href=url.toString();
+}
+
 function encodeScenarioSpec(spec){
   const bytes=new TextEncoder().encode(JSON.stringify(spec));
   let binary='';
@@ -487,6 +513,7 @@ async function applyScenarioShareSpec(spec){
   if(spec.leverage_limit)$('scenario-leverage-limit').value=String(spec.leverage_limit);
   await loadScenarioPlayers();
   await loadScenarioHistory();
+  await loadScenarioFutureGames();
 
   scenarioAbsences=(request.absences||[]).map(function(a){
     const player=scenarioPlayers.find(function(p){return p.player_id===a.player_id});
@@ -501,6 +528,15 @@ async function applyScenarioShareSpec(spec){
 
   const flip=(request.flipped_game_ids||[])[0]||'';
   if([].slice.call($('scenario-flip-game').options).some(function(o){return o.value===flip}))$('scenario-flip-game').value=flip;
+
+  const future=(request.future_results||[])[0];
+  $('scenario-future-enabled').checked=!!future;
+  $('scenario-future-fields').hidden=!future;
+  if(future&&[].slice.call($('scenario-future-game').options).some(function(o){return o.value===future.game_id})){
+    $('scenario-future-game').value=future.game_id;
+    renderScenarioFutureWinners();
+    if([].slice.call($('scenario-future-winner').options).some(function(o){return o.value===future.winner}))$('scenario-future-winner').value=future.winner;
+  }
 
   const trade=(request.trades||[])[0];
   $('scenario-trade-enabled').checked=!!trade;
@@ -547,6 +583,9 @@ $('scenario-copy').onclick=async function(){
 };
 $('scenario-reset').onclick=async function(){
   scenarioAbsences=[];
+  pendingScenarioFlipGameId=null;
+  $('scenario-future-enabled').checked=false;
+  $('scenario-future-fields').hidden=true;
   $('scenario-trade-enabled').checked=false;
   $('scenario-trade-fields').hidden=true;
   $('scenario-trade-minutes').value='34';
@@ -560,6 +599,7 @@ $('scenario-reset').onclick=async function(){
   $('scenario-leverage-limit').value='10';
   await loadScenarioPlayers();
   await loadScenarioHistory();
+  await loadScenarioFutureGames();
   renderScenarioAbsences();
   clearScenarioResults();
   const url=new URL(window.location.href);
@@ -571,15 +611,13 @@ $('scenario-reset').onclick=async function(){
 async function loadScenario(){
   await loadScenarioPlayers();
   await loadScenarioHistory();
+  await loadScenarioFutureGames();
   if(pendingScenarioFlipGameId){
     const gameId=pendingScenarioFlipGameId;
     const exists=[].slice.call($('scenario-flip-game').options).some(function(option){return option.value===gameId});
     if(exists)$('scenario-flip-game').value=gameId;
     pendingScenarioFlipGameId=null;
     setScenarioShareStatus(exists?'Replay branch loaded. Add more interventions or run the world.':'Replay game is not available before this cutoff.',!exists);
-  }
-  if(!scenarioAbsences.length&&!$('scenario-flip-game').value&&!$('scenario-trade-enabled').checked){
-    addScenarioAbsence(selectedImpactPlayerId||((scenarioPlayers[0]||{}).player_id));
   }
   renderScenarioAbsences();
   updateScenarioCountPreview();
@@ -593,10 +631,49 @@ async function loadScenarioHistory(){
   }).join('');
   if(rows.some(function(g){return g.game_id===previous}))select.value=previous;
 }
-$('scenario-date').onchange=loadScenarioHistory;
+async function loadScenarioFutureGames(){
+  const select=$('scenario-future-game');
+  const previous=select.value;
+  const rows=await json('/api/upcoming-games?as_of='+$('scenario-date').value+'&limit=120');
+  select.replaceChildren();
+  rows.forEach(function(g){
+    const option=document.createElement('option');
+    option.value=g.game_id;
+    option.textContent=g.date+' · '+g.away_team+' @ '+g.home_team;
+    option.dataset.home=g.home_team;
+    option.dataset.away=g.away_team;
+    option.dataset.date=g.date;
+    select.append(option);
+  });
+  if(rows.some(function(g){return g.game_id===previous}))select.value=previous;
+  renderScenarioFutureWinners();
+}
+function renderScenarioFutureWinners(){
+  const option=$('scenario-future-game').selectedOptions[0];
+  const winner=$('scenario-future-winner');
+  winner.replaceChildren();
+  if(!option)return;
+  [option.dataset.home,option.dataset.away].forEach(function(team){
+    const o=document.createElement('option');o.value=team;o.textContent=team;winner.append(o);
+  });
+}
+$('scenario-future-enabled').onchange=function(){
+  $('scenario-future-fields').hidden=!this.checked;
+  updateScenarioCountPreview();
+};
+$('scenario-future-game').onchange=renderScenarioFutureWinners;
+$('scenario-date').onchange=async function(){
+  await loadScenarioHistory();
+  await loadScenarioFutureGames();
+  await loadScenarioPlayers();
+  renderScenarioAbsences();
+  updateScenarioCountPreview();
+};
 async function loadScenarioPlayers(){
   const alpha=Number($('scenario-alpha').value||1000);
-  const d=await json('/api/impact?alpha='+alpha+'&limit=500');
+  const q=new URLSearchParams({alpha:String(alpha),limit:'500'});
+  if($('scenario-date').value)q.set('as_of',$('scenario-date').value);
+  const d=await json('/api/impact?'+q);
   scenarioPlayers=d.players||[];
   scenarioAbsences=scenarioAbsences.map(function(a){
     const p=scenarioPlayers.find(function(x){return x.player_id===a.player_id});
@@ -647,7 +724,7 @@ $('scenario-trade-b').onchange=function(){
   }
 };
 function updateScenarioCountPreview(){
-  const count=scenarioAbsences.length+($('scenario-flip-game').value?1:0)+($('scenario-trade-enabled').checked?1:0);
+  const count=scenarioAbsences.length+($('scenario-flip-game').value?1:0)+($('scenario-future-enabled').checked?1:0)+($('scenario-trade-enabled').checked?1:0);
   $('scenario-count').textContent=count;
 }
 $('scenario-flip-game').onchange=updateScenarioCountPreview;
@@ -708,6 +785,10 @@ function buildScenarioRequest(){
     seed:2026,
     alpha:Number($('scenario-alpha').value),
     flipped_game_ids:$('scenario-flip-game').value?[$('scenario-flip-game').value]:[],
+    future_results:$('scenario-future-enabled').checked&&$('scenario-future-game').value?[{
+      game_id:$('scenario-future-game').value,
+      winner:$('scenario-future-winner').value
+    }]:[],
     trades:tradeEnabled?[{
       player_a_id:$('scenario-trade-a').value,
       player_b_id:$('scenario-trade-b').value,
@@ -724,7 +805,8 @@ function buildScenarioRequest(){
 function validateScenarioRequest(body){
   const ids=body.absences.map(function(a){return a.player_id});
   if(new Set(ids).size!==ids.length)throw Error('Each player can appear only once in a scenario.');
-  if(!body.absences.length&&!body.trades.length&&!body.flipped_game_ids.length)throw Error('Add at least one scenario intervention.');
+  if(!body.absences.length&&!body.trades.length&&!body.flipped_game_ids.length&&!body.future_results.length)throw Error('Add at least one scenario intervention.');
+  if(body.future_results.length&&(!body.future_results[0].game_id||!body.future_results[0].winner))throw Error('Choose an upcoming game and winner.');
   if(body.trades.length){
     const trade=body.trades[0];
     if(trade.player_a_id===trade.player_b_id)throw Error('Trade players must be different.');
@@ -736,7 +818,7 @@ $('scenario-run').onclick=async function(){
   const button=$('scenario-run');button.disabled=true;
   try{
     const body=buildScenarioRequest();validateScenarioRequest(body);
-    const d=await json('/api/scenario/player-absence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await json('/api/scenario/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     scenarioLast=d;scenarioLastRequest=body;renderScenario(d);
   }catch(e){
     $('scenario-effects').classList.add('empty');$('scenario-effects').innerHTML='<span>'+e.message+'</span>';
@@ -865,7 +947,7 @@ function renderScenarioAwardFuture(d){
 function renderScenario(d){
   const deltas=d.deltas||[];
   const altered=Object.fromEntries(d.altered.teams.map(function(x){return [x.team,x]}));
-  $('scenario-count').textContent=(d.player_absences||[]).length+(d.historical_flips||[]).length+(d.trades||[]).length;$('scenario-sims').textContent=d.trials.toLocaleString();
+  $('scenario-count').textContent=(d.player_absences||[]).length+(d.historical_flips||[]).length+(d.future_results||[]).length+(d.trades||[]).length;$('scenario-sims').textContent=d.trials.toLocaleString();
   const biggestWin=[].concat(deltas).sort(function(a,b){return Math.abs(b.expected_wins_delta)-Math.abs(a.expected_wins_delta)})[0];
   const biggestTitle=[].concat(deltas).sort(function(a,b){return Math.abs(b.championship_probability_delta)-Math.abs(a.championship_probability_delta)})[0];
   $('scenario-win-swing').textContent=biggestWin?(biggestWin.team+' '+signed(biggestWin.expected_wins_delta)):'—';
@@ -873,6 +955,10 @@ function renderScenario(d){
   $('scenario-effects').classList.remove('empty');
   const historyCards=(d.historical_flips||[]).map(function(flip){
     return '<div class="scenario-effect"><span>HISTORICAL BRANCH · '+flip.game_date+'</span><strong>'+flip.original_winner+' → '+flip.flipped_winner+'</strong><small>'+flip.away_team+' @ '+flip.home_team+' · completed result reversed before rebuilding the point-in-time state</small></div>';
+  });
+  const futureCards=(d.future_results||[]).map(function(e){
+    const opponent=e.forced_winner===e.home_team?e.away_team:e.home_team;
+    return '<div class="scenario-effect"><span>FORCED FUTURE · '+e.game_date+'</span><strong>'+e.forced_winner+' over '+opponent+'</strong><small>'+e.away_team+' @ '+e.home_team+' · winner fixed in every simulated season path</small></div>';
   });
   const absenceCards=d.player_absences.map(function(e){
     return '<div class="scenario-effect"><span>'+e.player_name+' · '+e.team+' · '+e.games_missed+' games</span>'
@@ -885,7 +971,7 @@ function renderScenario(d){
       +'<small>'+e.team_a+': '+(e.team_a_margin_delta_per_game>=0?'+':'')+e.team_a_margin_delta_per_game.toFixed(2)+' pts/game ('+e.team_a_margin_delta_low_80.toFixed(2)+' to '+e.team_a_margin_delta_high_80.toFixed(2)+') · '+(e.team_a_elo_delta_per_game>=0?'+':'')+e.team_a_elo_delta_per_game.toFixed(0)+' Elo · '+e.team_a_affected_games.length+' games<br>'
       +e.team_b+': '+(e.team_b_margin_delta_per_game>=0?'+':'')+e.team_b_margin_delta_per_game.toFixed(2)+' pts/game ('+e.team_b_margin_delta_low_80.toFixed(2)+' to '+e.team_b_margin_delta_high_80.toFixed(2)+') · '+(e.team_b_elo_delta_per_game>=0?'+':'')+e.team_b_elo_delta_per_game.toFixed(0)+' Elo · '+e.team_b_affected_games.length+' games</small></div>';
   });
-  $('scenario-effects').innerHTML=historyCards.concat(tradeCards,absenceCards).join('');
+  $('scenario-effects').innerHTML=historyCards.concat(futureCards,tradeCards,absenceCards).join('');
   renderScenarioAwardRipple(d);
   renderScenarioSchedule(d);
   renderScenarioBars();
@@ -905,7 +991,7 @@ function renderScenarioSchedule(d){
   $('scenario-schedule-status').textContent=rows.length?rows.length+' affected games':'no future strength-adjusted games';
   if(!rows.length){
     target.classList.add('empty');
-    target.innerHTML='<span>This scenario changes history only; no future game receives a player/trade strength adjustment.</span>';
+    target.innerHTML='<span>No future game receives a player/trade strength adjustment. Forced results, if any, are shown in the intervention summary above.</span>';
     return;
   }
   target.classList.remove('empty');
@@ -945,7 +1031,8 @@ async function openScenarioMatchup(gameId){
       return entry[0]+' '+(entry[1]>=0?'+':'')+entry[1].toFixed(0)+' Elo';
     }).join(' · ');
     $('matchup-context').hidden=false;
-    $('matchup-context').innerHTML='<div><strong>SCENARIO MATCHUP · '+d.game.away_team+' @ '+d.game.home_team+' · '+d.game.date+'</strong><span>'+(adjustments||'No direct player/trade adjustment')+' · same altered history, single-game comparison</span></div><div class="scenario-shift">'+pct(d.baseline.team_a_series_probability)+' → '+pct(d.scenario.team_a_series_probability)+' <small>home win</small></div>';
+    const forced=d.forced_winner?(' · SCENARIO FIXES '+d.forced_winner+' TO WIN'):'';
+    $('matchup-context').innerHTML='<div><strong>SCENARIO MATCHUP · '+d.game.away_team+' @ '+d.game.home_team+' · '+d.game.date+'</strong><span>'+(adjustments||'No direct player/trade adjustment')+' · same altered history, single-game model context'+forced+'</span></div><div class="scenario-shift">'+pct(d.baseline.team_a_series_probability)+' → '+pct(d.scenario.team_a_series_probability)+' <small>home win model</small></div>';
   }catch(e){
     setScenarioShareStatus('Could not open scenario matchup: '+e.message,true);
   }

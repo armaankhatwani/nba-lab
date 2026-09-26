@@ -117,13 +117,21 @@
 
       <section class="view" id="view-scenario">
         <div class="scenario-toolbar panel">
-          <div><span class="eyebrow">SCENARIO LAB / COMPOSABLE WORLD</span><h2>Change the world. Re-run the league.</h2><p>Compose historical branches, player absences, and RAPM-backed trades. One scenario then propagates through season outcomes and award futures.</p></div>
+          <div><span class="eyebrow">SCENARIO LAB / COMPOSABLE WORLD</span><h2>Change the world. Re-run the league.</h2><p>Compose historical branches, forced future results, player absences, and RAPM-backed trades. One scenario then propagates through season outcomes, pivotal-game rankings, and award futures.</p></div>
           <div class="scenario-top-controls"><label>As-of<input id="scenario-date" type="date" value="2026-01-15"></label><label>Trials<select id="scenario-trials"><option>1000</option><option selected>5000</option><option>10000</option><option>25000</option></select></label><label>Ridge α<select id="scenario-alpha"><option value="100">100</option><option value="300">300</option><option value="1000" selected>1000</option><option value="3000">3000</option></select></label></div>
         </div>
         <div class="scenario-layout">
           <aside class="panel scenario-builder">
             <div class="section-head"><div><span class="eyebrow">INTERVENTIONS</span><h2>Build the alternate world</h2></div><div class="scenario-builder-actions"><button class="ghost-button" id="scenario-copy">COPY LINK</button><button class="ghost-button" id="scenario-reset">RESET</button><button class="ghost-button" id="scenario-add">+ ADD PLAYER</button></div></div><div id="scenario-share-status" class="scenario-share-status"></div>
-            <div class="scenario-history-branch"><label>Optional historical branch<select id="scenario-flip-game"><option value="">No game flip</option></select></label><small>Reverse one completed game before the cutoff, then layer player absences on top of that altered history.</small></div>
+            <div class="scenario-history-branch"><label>Optional historical branch<select id="scenario-flip-game"><option value="">No game flip</option></select></label><small>Reverse one completed game before the cutoff, then layer other interventions on top of that altered history.</small></div>
+            <div class="scenario-future-card">
+              <div class="scenario-future-head"><label><input id="scenario-future-enabled" type="checkbox"> Force an upcoming result</label></div>
+              <div id="scenario-future-fields" hidden>
+                <label>Upcoming game<select id="scenario-future-game"></select></label>
+                <label>Force winner<select id="scenario-future-winner"></select></label>
+                <small>This result is deterministic in every simulated future. It is separate from rewriting a game that already occurred before the cutoff.</small>
+              </div>
+            </div>
             <div class="scenario-trade-card">
               <div class="scenario-trade-head"><label><input id="scenario-trade-enabled" type="checkbox"> Add player-for-player trade</label></div>
               <div id="scenario-trade-fields" hidden>

@@ -4,7 +4,7 @@
 
 NBA Lab is a point-in-time basketball simulation and counterfactual analysis system. Pick an as-of date, reconstruct the league using only information available by that point, change one or more facts, and replay the consequences through the rest of the season.
 
-The current signature interaction is **Scenario Lab**: combine a historical game flip, player absences, and a RAPM-backed player-for-player trade in one alternate world, then measure the ripple through expected wins, playoff/title distributions, and simulated MVP finishes.
+The current signature interaction is **Scenario Lab**: combine a historical game flip, a forced upcoming result, player absences, and a RAPM-backed player-for-player trade in one alternate world, then measure the ripple through expected wins, playoff/title distributions, and simulated MVP finishes.
 
 ## Why this is not another stats dashboard
 
@@ -23,7 +23,7 @@ Complexity has to earn promotion through chronological evaluation or by unlockin
 ## Live labs
 
 - **Season Lab** — simulate the remaining regular season, play-in, playoffs, Finals, and historical game-result branches.
-- **Scenario Lab** — compose history, availability, and RAPM-backed trade interventions; compare season distributions; propagate the same world into MVP futures; copy a reproducible scenario link.
+- **Scenario Lab** — compose history, forced future results, availability, and RAPM-backed trade interventions; compare season distributions; propagate the same world into MVP futures and pivotal-game rankings; copy a reproducible scenario link.
 - **Matchup Lab** — simulate one game or a best-of-3/5/7 from a frozen point-in-time team state.
 - **Timeline Lab** — replay a team's rating and record game by game.
 - **Model Lab** — inspect chronological Brier score, log loss, accuracy, calibration, and the promotion baseline.

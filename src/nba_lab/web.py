@@ -32,7 +32,13 @@ from .demo_impact import synthetic_impact_snapshot
 from .demo_replay import synthetic_replay_snapshots
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
-from .scenario import PlayerAbsence, TradeIntervention, build_scenario_inputs, simulate_scenario
+from .scenario import (
+    FutureResultIntervention,
+    PlayerAbsence,
+    TradeIntervention,
+    build_scenario_inputs,
+    simulate_scenario,
+)
 from .teams import TEAMS
 from .timeline import team_timeline
 
@@ -184,21 +190,27 @@ class TradeRequest(BaseModel):
     minutes_per_game: float = Field(default=34.0, gt=0, le=48)
 
 
-class PlayerAbsenceScenarioRequest(BaseModel):
+class FutureResultRequest(BaseModel):
+    game_id: str
+    winner: str
+
+
+class ScenarioRequest(BaseModel):
     as_of: date
     trials: int = Field(default=5000, ge=100, le=25000)
     seed: int = 2026
     alpha: float = Field(default=1000.0, gt=0, le=10000)
     absences: list[PlayerAbsenceRequest] = Field(default_factory=list)
     flipped_game_ids: list[str] = Field(default_factory=list)
+    future_results: list[FutureResultRequest] = Field(default_factory=list)
     trades: list[TradeRequest] = Field(default_factory=list)
 
 
-class ScenarioMatchupRequest(PlayerAbsenceScenarioRequest):
+class ScenarioMatchupRequest(ScenarioRequest):
     game_id: str
 
 
-def _scenario_absences(request: PlayerAbsenceScenarioRequest):
+def _scenario_absences(request: ScenarioRequest):
     return [
         PlayerAbsence(
             player_id=row.player_id,
@@ -210,7 +222,14 @@ def _scenario_absences(request: PlayerAbsenceScenarioRequest):
     ]
 
 
-def _scenario_trades(request: PlayerAbsenceScenarioRequest):
+def _scenario_future_results(request: ScenarioRequest):
+    return [
+        FutureResultIntervention(game_id=row.game_id, winner=row.winner)
+        for row in request.future_results
+    ]
+
+
+def _scenario_trades(request: ScenarioRequest):
     return [
         TradeIntervention(
             player_a_id=row.player_a_id,
@@ -219,6 +238,15 @@ def _scenario_trades(request: PlayerAbsenceScenarioRequest):
         )
         for row in request.trades
     ]
+
+
+def _scenario_has_intervention(request: ScenarioRequest) -> bool:
+    return bool(
+        request.absences
+        or request.flipped_game_ids
+        or request.future_results
+        or request.trades
+    )
 
 
 def _serialize(result):
@@ -304,6 +332,23 @@ def games(before: date, team: str | None = None, limit: int = 40):
             "winner": game.winner,
         }
         for game in rows[: max(1, min(limit, 100))]
+    ]
+
+
+@app.get("/api/upcoming-games")
+def upcoming_games(as_of: date, limit: int = 100):
+    rows = sorted(
+        (game for game in GAMES if game.game_date >= as_of),
+        key=lambda game: (game.game_date, game.game_id),
+    )
+    return [
+        {
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+        }
+        for game in rows[: max(1, min(limit, 250))]
     ]
 
 
@@ -729,9 +774,10 @@ def replay_simulate(request: ReplaySimRequest):
     }
 
 
+@app.post("/api/scenario/run")
 @app.post("/api/scenario/player-absence")
-def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
-    if not request.absences and not request.flipped_game_ids and not request.trades:
+def run_scenario(request: ScenarioRequest):
+    if not _scenario_has_intervention(request):
         raise HTTPException(422, "scenario requires at least one intervention")
     try:
         result = simulate_scenario(
@@ -741,6 +787,7 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
             _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
+            future_results=_scenario_future_results(request),
             trades=_scenario_trades(request),
             trials=request.trials,
             seed=request.seed,
@@ -807,16 +854,17 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
         "deltas": [asdict(row) for row in result.deltas],
         "player_absences": [asdict(row) for row in result.player_absences],
         "historical_flips": [asdict(row) for row in result.historical_flips],
+        "future_results": [asdict(row) for row in result.future_results],
         "trades": [asdict(row) for row in result.trades],
         "affected_games": affected_games,
         "award_ripple": award_ripple[:8],
-        "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games. Historical flips rebuild point-in-time team and award context.",
+        "warning": "Scenario outputs are model counterfactuals. Player interventions use RAPM association estimates; historical branches rebuild point-in-time context; forced future results are deterministic assumptions inside every simulated path.",
     }
 
 
 @app.post("/api/scenario/matchup")
 def scenario_matchup(request: ScenarioMatchupRequest):
-    if not request.absences and not request.flipped_game_ids and not request.trades:
+    if not _scenario_has_intervention(request):
         raise HTTPException(422, "scenario requires at least one intervention")
     game = next((row for row in GAMES if row.game_id == request.game_id), None)
     if game is None:
@@ -831,6 +879,7 @@ def scenario_matchup(request: ScenarioMatchupRequest):
             _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
+            future_results=_scenario_future_results(request),
             trades=_scenario_trades(request),
         )
         baseline = simulate_matchup(
@@ -864,18 +913,19 @@ def scenario_matchup(request: ScenarioMatchupRequest):
             "away_team": game.away_team,
         },
         "rating_adjustments": adjustments,
+        "forced_winner": inputs.forced_winners.get(game.game_id),
         "baseline": asdict(baseline),
         "scenario": asdict(altered),
         "home_win_probability_delta": (
             altered.team_a_series_probability - baseline.team_a_series_probability
         ),
-        "warning": "The scenario adjustment changes the frozen pregame team-strength prior for this scheduled game; it is not a causal player-on/off game prediction.",
+        "warning": "The matchup probabilities show the underlying model context. If forced_winner is set, the Scenario still fixes that game result deterministically in season simulations.",
     }
 
 
 @app.post("/api/scenario/sensitivity")
-def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_trials: int = 750):
-    if not request.absences and not request.flipped_game_ids and not request.trades:
+def scenario_sensitivity(request: ScenarioRequest, sensitivity_trials: int = 750):
+    if not _scenario_has_intervention(request):
         raise HTTPException(422, "scenario requires at least one intervention")
     sensitivity_trials = max(100, min(sensitivity_trials, 5000))
     try:
@@ -886,6 +936,7 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
             _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
+            future_results=_scenario_future_results(request),
             trades=_scenario_trades(request),
         )
     except ValueError as exc:
@@ -904,6 +955,7 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
         trials=sensitivity_trials,
         seed=request.seed,
         game_rating_adjustments=inputs.game_rating_adjustments,
+        forced_winners=inputs.forced_winners,
     )
     impact_lower = simulate_remaining_season(
         altered_games,
@@ -911,6 +963,7 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
         trials=sensitivity_trials,
         seed=request.seed,
         game_rating_adjustments=inputs.impact_lower_adjustments,
+        forced_winners=inputs.forced_winners,
     )
     impact_upper = simulate_remaining_season(
         altered_games,
@@ -918,6 +971,7 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
         trials=sensitivity_trials,
         seed=request.seed,
         game_rating_adjustments=inputs.impact_upper_adjustments,
+        forced_winners=inputs.forced_winners,
     )
     baseline_by = {row.team: row for row in baseline.teams}
     point_by = {row.team: row for row in point.teams}
@@ -979,8 +1033,8 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
 
 
 @app.post("/api/scenario/awards")
-def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 750):
-    if not request.absences and not request.flipped_game_ids and not request.trades:
+def scenario_awards(request: ScenarioRequest, award_trials: int = 750):
+    if not _scenario_has_intervention(request):
         raise HTTPException(422, "scenario requires at least one intervention")
     award_trials = max(100, min(award_trials, 5000))
     try:
@@ -991,6 +1045,7 @@ def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 7
             _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
+            future_results=_scenario_future_results(request),
             trades=_scenario_trades(request),
         )
     except ValueError as exc:
@@ -1021,6 +1076,7 @@ def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 7
         game_rating_adjustments=inputs.game_rating_adjustments,
         player_unavailable_game_ids=unavailable,
         player_team_overrides=team_overrides,
+        forced_winners=inputs.forced_winners,
     )
 
     before = {row.player_id: row for row in baseline.candidates}
@@ -1062,11 +1118,11 @@ def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 7
 
 @app.post("/api/scenario/leverage")
 def scenario_leverage(
-    request: PlayerAbsenceScenarioRequest,
+    request: ScenarioRequest,
     leverage_trials: int = 500,
     limit: int = 10,
 ):
-    if not request.absences and not request.flipped_game_ids and not request.trades:
+    if not _scenario_has_intervention(request):
         raise HTTPException(422, "scenario requires at least one intervention")
     leverage_trials = max(100, min(leverage_trials, 5000))
     limit = max(1, min(limit, 20))
@@ -1078,6 +1134,7 @@ def scenario_leverage(
             _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
+            future_results=_scenario_future_results(request),
             trades=_scenario_trades(request),
         )
         baseline_rows = rank_upcoming_games(
@@ -1086,6 +1143,7 @@ def scenario_leverage(
             trials=leverage_trials,
             seed=request.seed,
             limit=limit,
+            excluded_game_ids=set(inputs.forced_winners),
         )
         scenario_rows = rank_upcoming_games(
             list(inputs.altered_games),
@@ -1094,6 +1152,8 @@ def scenario_leverage(
             seed=request.seed,
             limit=limit,
             game_rating_adjustments=inputs.game_rating_adjustments,
+            excluded_game_ids=set(inputs.forced_winners),
+            forced_winners=inputs.forced_winners,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
