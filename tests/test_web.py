@@ -659,3 +659,27 @@ def test_scenario_lineups_remove_absent_player_from_available_fives():
         '1628369' not in lineup['players']
         for lineup in bos['scenario_lineups']
     )
+
+
+def test_trade_scenario_exposes_persistent_team_strength():
+    players = client.get('/api/impact?alpha=1000&limit=100').json()['players']
+    a = players[0]
+    b = next(row for row in reversed(players) if row['team'] != a['team'])
+    r = client.post('/api/scenario/run', json={
+        'as_of': '2026-01-15',
+        'trials': 120,
+        'seed': 92,
+        'alpha': 1000,
+        'trades': [{
+            'player_a_id': a['player_id'],
+            'player_b_id': b['player_id'],
+            'minutes_per_game': 34
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    adjustments = data['team_rating_adjustments']
+    assert adjustments[a['team']] != 0
+    assert adjustments[b['team']] != 0
+    assert adjustments[a['team']] * adjustments[b['team']] <= 0
+    assert data['affected_games']
