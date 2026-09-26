@@ -30,7 +30,7 @@ from .demo_impact import synthetic_impact_snapshot
 from .demo_replay import synthetic_replay_snapshots
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
-from .scenario import PlayerAbsence, TradeIntervention, simulate_scenario
+from .scenario import PlayerAbsence, TradeIntervention, build_scenario_inputs, simulate_scenario
 from .teams import TEAMS
 from .timeline import team_timeline
 
@@ -175,6 +175,29 @@ class PlayerAbsenceScenarioRequest(BaseModel):
     absences: list[PlayerAbsenceRequest] = Field(default_factory=list)
     flipped_game_ids: list[str] = Field(default_factory=list)
     trades: list[TradeRequest] = Field(default_factory=list)
+
+
+def _scenario_absences(request: PlayerAbsenceScenarioRequest):
+    return [
+        PlayerAbsence(
+            player_id=row.player_id,
+            games_missed=row.games_missed,
+            minutes_per_game=row.minutes_per_game,
+            replacement_impact_per_100=row.replacement_impact_per_100,
+        )
+        for row in request.absences
+    ]
+
+
+def _scenario_trades(request: PlayerAbsenceScenarioRequest):
+    return [
+        TradeIntervention(
+            player_a_id=row.player_a_id,
+            player_b_id=row.player_b_id,
+            minutes_per_game=row.minutes_per_game,
+        )
+        for row in request.trades
+    ]
 
 
 def _serialize(result):
@@ -611,24 +634,9 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
             request.as_of,
             IMPACT_SNAPSHOT,
             _impact_result(float(request.alpha)),
-            [
-                PlayerAbsence(
-                    player_id=row.player_id,
-                    games_missed=row.games_missed,
-                    minutes_per_game=row.minutes_per_game,
-                    replacement_impact_per_100=row.replacement_impact_per_100,
-                )
-                for row in request.absences
-            ],
+            _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
-            trades=[
-                TradeIntervention(
-                    player_a_id=row.player_a_id,
-                    player_b_id=row.player_b_id,
-                    minutes_per_game=row.minutes_per_game,
-                )
-                for row in request.trades
-            ],
+            trades=_scenario_trades(request),
             trials=request.trials,
             seed=request.seed,
         )
@@ -665,6 +673,88 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
         "trades": [asdict(row) for row in result.trades],
         "award_ripple": award_ripple[:8],
         "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games. Historical flips rebuild point-in-time team and award context.",
+    }
+
+
+@app.post("/api/scenario/awards")
+def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 750):
+    if not request.absences and not request.flipped_game_ids and not request.trades:
+        raise HTTPException(422, "scenario requires at least one intervention")
+    award_trials = max(100, min(award_trials, 5000))
+    try:
+        inputs = build_scenario_inputs(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            _impact_result(float(request.alpha)),
+            _scenario_absences(request),
+            flipped_game_ids=request.flipped_game_ids,
+            trades=_scenario_trades(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    unavailable = {
+        effect.player_id: set(effect.affected_game_ids)
+        for effect in inputs.player_absences
+    }
+    team_overrides = {}
+    for trade in inputs.trades:
+        team_overrides[trade.player_a_id] = trade.team_b
+        team_overrides[trade.player_b_id] = trade.team_a
+
+    baseline = simulate_award_futures(
+        GAMES,
+        AWARD_LOGS,
+        request.as_of,
+        trials=award_trials,
+        seed=request.seed,
+    )
+    altered = simulate_award_futures(
+        list(inputs.altered_games),
+        AWARD_LOGS,
+        request.as_of,
+        trials=award_trials,
+        seed=request.seed,
+        game_rating_adjustments=inputs.game_rating_adjustments,
+        player_unavailable_game_ids=unavailable,
+        player_team_overrides=team_overrides,
+    )
+
+    before = {row.player_id: row for row in baseline.candidates}
+    after = {row.player_id: row for row in altered.candidates}
+    rows = []
+    for player_id in sorted(set(before) | set(after)):
+        left = before.get(player_id)
+        right = after.get(player_id)
+        if left is None and right is None:
+            continue
+        rows.append({
+            "player_id": player_id,
+            "player_name": (right or left).player_name,
+            "baseline_team": left.team if left else None,
+            "altered_team": right.team if right else None,
+            "baseline_leader_probability": left.leader_probability if left else 0.0,
+            "altered_leader_probability": right.leader_probability if right else 0.0,
+            "leader_probability_delta": (
+                (right.leader_probability if right else 0.0)
+                - (left.leader_probability if left else 0.0)
+            ),
+            "baseline_top3_probability": left.top3_probability if left else 0.0,
+            "altered_top3_probability": right.top3_probability if right else 0.0,
+            "mean_final_score_delta": (
+                (right.mean_final_score if right else 0.0)
+                - (left.mean_final_score if left else 0.0)
+            ),
+        })
+    rows.sort(key=lambda row: abs(row["leader_probability_delta"]), reverse=True)
+    return {
+        "as_of": request.as_of.isoformat(),
+        "award_trials": award_trials,
+        "baseline": [asdict(row) for row in baseline.candidates],
+        "altered": [asdict(row) for row in altered.candidates],
+        "deltas": rows,
+        "warning": "Award finishing shares are model leaderboard frequencies under bootstrapped player game lines, not calibrated voter probabilities.",
     }
 
 
