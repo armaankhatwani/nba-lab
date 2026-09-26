@@ -492,18 +492,10 @@ def test_scenario_lineups_move_traded_players_between_rosters():
     data = r.json()
     teams = {row['team']: row for row in data['teams']}
     assert {'BOS', 'DEN'} <= set(teams)
-    bos_ids = {
-        meta['player_id']
-        for lineup in teams['BOS']['scenario_lineups']
-        for meta in lineup['player_meta']
-    }
-    den_ids = {
-        meta['player_id']
-        for lineup in teams['DEN']['scenario_lineups']
-        for meta in lineup['player_meta']
-    }
-    assert '203999' in bos_ids
-    assert '1628369' in den_ids
+    assert '203999' in teams['BOS']['scenario_roster']
+    assert '1628369' not in teams['BOS']['scenario_roster']
+    assert '1628369' in teams['DEN']['scenario_roster']
+    assert '203999' not in teams['DEN']['scenario_roster']
 
 
 def test_scenario_lineups_remove_absent_player_from_available_fives():
