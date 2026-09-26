@@ -263,3 +263,40 @@ def test_scenario_awards_tracks_traded_candidate_team():
     tatum = next(row for row in data['deltas'] if row['player_id'] == '1628369')
     assert jokic['baseline_team'] == 'DEN' and jokic['altered_team'] == 'BOS'
     assert tatum['baseline_team'] == 'BOS' and tatum['altered_team'] == 'DEN'
+
+
+def test_scenario_sensitivity_orders_positive_player_absence_worlds():
+    r = client.post('/api/scenario/sensitivity?sensitivity_trials=180', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 31,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 10,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    lower = next(row for row in data['impact_lower']['teams'] if row['team'] == 'BOS')
+    point = next(row for row in data['point']['teams'] if row['team'] == 'BOS')
+    upper = next(row for row in data['impact_upper']['teams'] if row['team'] == 'BOS')
+    # Higher assumed Tatum impact means a stronger absence penalty.
+    assert upper['expected_wins'] <= point['expected_wins'] <= lower['expected_wins']
+
+
+def test_scenario_sensitivity_preserves_historical_branch_across_worlds():
+    game = client.get('/api/games?before=2026-01-15&limit=1').json()[0]
+    r = client.post('/api/scenario/sensitivity?sensitivity_trials=120', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 32,
+        'alpha': 1000,
+        'flipped_game_ids': [game['game_id']]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    # With no player-impact intervention, lower/point/upper are identical worlds.
+    assert data['impact_lower']['teams'] == data['point']['teams'] == data['impact_upper']['teams']
