@@ -1346,7 +1346,11 @@ function renderScenarioSchedule(d){
       +'<div class="scenario-game-matchup"><strong>'+g.away_team+' @ '+g.home_team+'</strong><span>'+pct(g.baseline_home_win_probability)+' → '+pct(g.altered_home_win_probability)+' home win</span></div>'
       +'<div class="scenario-game-deltas">'+deltas.join('')+'</div>'
       +'<div class="scenario-game-prob"><strong class="'+(delta>=0?'positive':'negative')+'">'+(delta>=0?'+':'')+(100*delta).toFixed(1)+' pts</strong><span>'+(g.forced_winner?'model shift · result fixed':'home-win shift')+'</span></div>'
-      +'<div class="scenario-game-actions"><button data-scenario-matchup="'+g.game_id+'">MATCHUP ↗</button><button data-scenario-lineups="'+g.game_id+'">CLOSING 5 ↗</button></div>'
+      +'<div class="scenario-game-actions"><button data-scenario-matchup="'+g.game_id+'">MATCHUP ↗</button>'
+      +(g.closing_lineup_available
+        ?'<button data-scenario-lineups="'+g.game_id+'">CLOSING 5 ↗</button>'
+        :'<button disabled title="Both teams need five point-in-time RAPM players">NO IMPACT DATA</button>')
+      +'</div>'
       +'</div>';
   }).join('');
   document.querySelectorAll('[data-scenario-matchup]').forEach(function(button){
