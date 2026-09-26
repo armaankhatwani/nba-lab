@@ -859,6 +859,49 @@ def replay_simulate(request: ReplaySimRequest):
     )
     if event is None:
         raise HTTPException(404, f"Unknown replay action: {request.action_number}")
+    game = next((game for game in GAMES if game.game_id == request.game_id), None)
+    if game is None:
+        raise HTTPException(404, f"Unknown scheduled game: {request.game_id}")
+
+    lineup_intervention = None
+    future_margin_adjustment = 0.0
+    lineup_requested = bool(
+        request.lineup_side
+        or request.baseline_lineup
+        or request.altered_lineup
+    )
+    if lineup_requested:
+        if request.lineup_side not in {"home", "away"}:
+            raise HTTPException(422, "lineup_side must be home or away")
+        if not request.baseline_lineup or not request.altered_lineup:
+            raise HTTPException(
+                422,
+                "lineup intervention requires baseline_lineup and altered_lineup",
+            )
+        target_team = (
+            game.home_team
+            if request.lineup_side == "home"
+            else game.away_team
+        )
+        try:
+            impact_snapshot = _impact_snapshot_as_of(game.game_date)
+            rapm = _impact_result(float(request.lineup_alpha), game.game_date)
+            lineup_intervention = build_replay_lineup_intervention(
+                impact_snapshot,
+                rapm,
+                event,
+                request.lineup_side,
+                target_team,
+                tuple(request.baseline_lineup),
+                tuple(request.altered_lineup),
+                prior_possessions=request.lineup_prior_possessions,
+            )
+            future_margin_adjustment = (
+                lineup_intervention.future_margin_adjustment
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     try:
         result = compare_replay_intervention(
             GAMES,
@@ -867,10 +910,11 @@ def replay_simulate(request: ReplaySimRequest):
             seed=request.seed,
             home_score_delta=request.home_score_delta,
             away_score_delta=request.away_score_delta,
+            future_margin_adjustment=future_margin_adjustment,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    game = next(game for game in GAMES if game.game_id == request.game_id)
+
     season_ripple = propagate_replay_to_season(
         GAMES,
         request.game_id,
@@ -879,6 +923,45 @@ def replay_simulate(request: ReplaySimRequest):
         trials=min(1000, request.trials),
         seed=request.seed,
     )
+
+    lineup_payload = None
+    if lineup_intervention is not None:
+        impact_snapshot = _impact_snapshot_as_of(game.game_date)
+
+        def serialize_lineup(row):
+            return {
+                **asdict(row),
+                "player_meta": [
+                    asdict(impact_snapshot.players[player_id])
+                    for player_id in row.players
+                ],
+            }
+
+        lineup_payload = {
+            "side": lineup_intervention.side,
+            "team": lineup_intervention.team,
+            "baseline": serialize_lineup(lineup_intervention.baseline),
+            "altered": serialize_lineup(lineup_intervention.altered),
+            "lineup_delta_per_100": lineup_intervention.lineup_delta_per_100,
+            "estimated_remaining_possessions": (
+                lineup_intervention.estimated_remaining_possessions
+            ),
+            "future_margin_adjustment": (
+                lineup_intervention.future_margin_adjustment
+            ),
+            "outgoing": asdict(
+                impact_snapshot.players[
+                    lineup_intervention.outgoing_player_id
+                ]
+            ),
+            "incoming": asdict(
+                impact_snapshot.players[
+                    lineup_intervention.incoming_player_id
+                ]
+            ),
+            "assumption": "The altered five is held constant for the modeled remaining possessions. No fatigue, subsequent substitutions, role changes, or matchup-specific interactions are modeled.",
+        }
+
     return {
         "source": REPLAY_SOURCE,
         "game": {
@@ -892,14 +975,18 @@ def replay_simulate(request: ReplaySimRequest):
         "altered": asdict(result.altered),
         "home_win_probability_delta": result.home_win_probability_delta,
         "expected_final_margin_delta": result.expected_final_margin_delta,
+        "lineup_intervention": lineup_payload,
         "season_ripple": {
             "trials": season_ripple.trials,
             "home_win_probability_delta": season_ripple.home_win_probability_delta,
             "teams": [asdict(row) for row in season_ripple.teams[:10]],
         },
-        "warning": "This is a game-state counterfactual baseline, not a possession-level causal model.",
+        "warning": (
+            "This is a game-state model counterfactual. Lineup interventions use point-in-time RAPM/observed-lineup evidence and assume the selected five remains on the floor for the modeled remainder; they are not causal claims."
+            if lineup_payload
+            else "This is a game-state counterfactual baseline, not a possession-level causal model."
+        ),
     }
-
 
 @app.post("/api/scenario/run")
 @app.post("/api/scenario/player-absence")
