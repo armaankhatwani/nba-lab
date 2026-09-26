@@ -8,6 +8,7 @@ from nba_lab.data_bundle import (
     load_bundle_manifest,
     select_replay_games,
     sync_season_bundle,
+    verify_bundle_manifest,
     write_json_artifact,
 )
 from nba_lab.domain import Game
@@ -190,3 +191,27 @@ def test_bundle_summary_handles_missing_and_valid_manifest(tmp_path):
     assert summary["replay_errors"] == 1
     assert summary["impact_status"] == "ok"
     assert summary["impact_stints"] == 1234
+
+
+def test_verify_bundle_manifest_detects_hash_mismatch(tmp_path):
+    artifact = tmp_path / "schedule.json"
+    info = write_json_artifact(artifact, {"SeasonGames": []})
+    awards = tmp_path / "players.json"
+    awards_info = write_json_artifact(awards, {"PlayerGameLogs": []})
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps({
+        "schema_version": 1,
+        "season": "2025-26",
+        "schedule": info,
+        "awards": awards_info,
+        "replays": [],
+        "impact": {"status": "skipped"},
+    }))
+
+    assert verify_bundle_manifest(manifest_path)["valid"] is True
+
+    artifact.write_text("tampered")
+    report = verify_bundle_manifest(manifest_path)
+    assert report["valid"] is False
+    schedule = next(row for row in report["artifacts"] if row["name"] == "schedule")
+    assert schedule["status"] == "hash_mismatch"
