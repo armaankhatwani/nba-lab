@@ -488,7 +488,7 @@ def test_scenario_leverage_requires_an_intervention():
 
 
 def _first_future_game(as_of="2026-01-15"):
-    rows = client.get(f'/api/leverage?as_of={as_of}&trials=100&limit=1').json()['games']
+    rows = client.get(f'/api/upcoming-games?as_of={as_of}&limit=1').json()
     assert rows
     return rows[0]
 
