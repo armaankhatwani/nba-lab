@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from datetime import date, timedelta
 from functools import lru_cache
+from math import comb
 import os
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from .elo import EloModel
 from .matchup import simulate_matchup
 from .impact import fit_rapm
 from .impact_source import load_impact_snapshot, snapshot_as_of
-from .lineup import compare_lineups
+from .lineup import compare_lineups, optimize_lineups
 from .leverage import rank_upcoming_games
 from .replay import compare_replay_intervention
 from .replay_source import load_replay_directory
@@ -522,6 +523,63 @@ def lineup_players(alpha: float = 1000.0, as_of: date | None = None):
         "source": IMPACT_SOURCE,
         "as_of": as_of.isoformat() if as_of else None,
         "players": rows,
+    }
+
+
+@app.get("/api/lineup/optimize")
+def lineup_optimize(
+    team: str,
+    alpha: float = 1000.0,
+    prior_possessions: float = 300.0,
+    top_k: int = 8,
+    as_of: date | None = None,
+):
+    if alpha <= 0 or alpha > 10000:
+        raise HTTPException(422, "alpha must be in (0, 10000]")
+    if prior_possessions <= 0 or prior_possessions > 5000:
+        raise HTTPException(422, "prior_possessions must be in (0, 5000]")
+    try:
+        snapshot = (
+            IMPACT_SNAPSHOT
+            if as_of is None
+            else _impact_snapshot_as_of(as_of)
+        )
+        rapm = _impact_result(float(alpha), as_of)
+        available = {row.player_id for row in rapm.players}
+        candidates = tuple(
+            player_id
+            for player_id, meta in snapshot.players.items()
+            if meta.team == team and player_id in available
+        )
+        rows = optimize_lineups(
+            snapshot,
+            rapm,
+            candidates,
+            prior_possessions=prior_possessions,
+            top_k=max(1, min(top_k, 25)),
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    def serialize(row):
+        return {
+            **asdict(row),
+            "player_meta": [
+                asdict(snapshot.players[player_id])
+                for player_id in row.players
+            ],
+        }
+
+    return {
+        "source": IMPACT_SOURCE,
+        "team": team,
+        "as_of": as_of.isoformat() if as_of else None,
+        "alpha": alpha,
+        "prior_possessions": prior_possessions,
+        "candidate_players": len(candidates),
+        "combinations_evaluated": comb(len(candidates), 5),
+        "lineups": [serialize(row) for row in rows],
+        "warning": "Optimizer ranks the snapshot roster under the RAPM-plus-observed-lineup model. It does not model roles, fatigue, matchup fit, or minute feasibility.",
     }
 
 
