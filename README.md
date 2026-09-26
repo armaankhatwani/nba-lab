@@ -38,17 +38,35 @@ Complexity has to earn promotion through chronological evaluation or by unlockin
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e '.[dev,data]'
+pip install -e '.[dev,data,impact]'
 
-# Optional: freeze an NBA schedule snapshot for real historical games.
-nba-lab-sync --season 2025-26
+# Recommended real-data demo bundle:
+# - official schedule/results
+# - official player game logs
+# - 8 automatically selected close-game PlayByPlayV3 snapshots
+# - a scoped RAPM snapshot from 120 games involving the demo teams
+nba-lab-sync-bundle \
+  --season 2025-26 \
+  --replay-count 8 \
+  --replay-team BOS \
+  --replay-team NYK \
+  --impact-games 120 \
+  --impact-team BOS \
+  --impact-team NYK \
+  --impact-team DEN \
+  --impact-team OKC
+
+# Verify every frozen artifact against the generated SHA-256 manifest.
+nba-lab-doctor
 
 nba-lab
 ```
 
 Open `http://127.0.0.1:8765`.
 
-Without local snapshots, NBA Lab uses clearly labeled deterministic synthetic fixtures so the full product remains testable offline. The synthetic Awards and Player Impact fixtures intentionally share several recognizable player identities for cross-lab demos; their generated performance and RAPM values are still synthetic and must not be presented as NBA facts.
+For a quicker setup, omit the `--impact-*` flags. Schedule, Awards, and Game Replay will use real frozen NBA data while Player Impact/Lineup/Scenario player interventions remain on the clearly labeled deterministic fallback.
+
+The Overview includes a **Data Layer** panel that states which sources are real versus synthetic at runtime. Synthetic Awards and Player Impact fixtures intentionally share several recognizable player identities for cross-lab demos; their generated performance and RAPM values are still synthetic and must not be presented as NBA facts.
 
 ## Scenario model
 
