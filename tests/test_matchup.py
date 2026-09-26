@@ -32,3 +32,16 @@ def test_single_game_has_length_one():
 def test_same_team_rejected():
     with pytest.raises(ValueError):
         simulate_matchup(games(), "NYK", "NYK", date(2026, 1, 5))
+
+
+def test_positive_rating_adjustment_increases_matchup_probability():
+    games=synthetic_demo_games()
+    baseline=simulate_matchup(
+        games,'BOS','NYK',date(2026,1,15),trials=1200,best_of=1,seed=55
+    )
+    boosted=simulate_matchup(
+        games,'BOS','NYK',date(2026,1,15),trials=1200,best_of=1,seed=55,
+        rating_adjustments={'BOS':100.0},
+    )
+    assert boosted.team_a_rating == baseline.team_a_rating + 100.0
+    assert boosted.team_a_series_probability > baseline.team_a_series_probability
