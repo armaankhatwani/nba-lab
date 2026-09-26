@@ -546,7 +546,8 @@ function scenarioShareSpec(){
     sensitivity_trials:Number($('scenario-sensitivity-trials').value||750),
     leverage_trials:Number($('scenario-leverage-trials').value||500),
     leverage_limit:Number($('scenario-leverage-limit').value||10),
-    lineup_limit:Number($('scenario-lineup-limit').value||4)
+    lineup_limit:Number($('scenario-lineup-limit').value||4),
+    world_seed:Number($('scenario-world-seed').value||2026)
   };
 }
 function setScenarioShareStatus(message,isError){
@@ -577,6 +578,12 @@ function clearScenarioResults(){
   $('scenario-lineup-results').innerHTML='<span>Trade or remove a player, then recompute the affected teams\' best modeled five-man groups.</span>';
   $('scenario-award-future-bars').classList.add('empty');
   $('scenario-award-future-bars').innerHTML='<span>Run an alternate world, then propagate it through the remaining MVP simulation.</span>';
+  $('scenario-world-champion').textContent='—';
+  $('scenario-world-east').textContent='—';
+  $('scenario-world-west').textContent='—';
+  $('scenario-world-games').textContent='—';
+  $('scenario-world-content').classList.add('empty');
+  $('scenario-world-content').innerHTML='<span>Run one future to turn the probability distribution into a concrete season path.</span>';
 }
 async function applyScenarioShareSpec(spec){
   if(!spec||spec.v!==1||!spec.request)throw Error('Unsupported scenario link format.');
@@ -589,6 +596,7 @@ async function applyScenarioShareSpec(spec){
   if(spec.leverage_trials)$('scenario-leverage-trials').value=String(spec.leverage_trials);
   if(spec.leverage_limit)$('scenario-leverage-limit').value=String(spec.leverage_limit);
   if(spec.lineup_limit)$('scenario-lineup-limit').value=String(spec.lineup_limit);
+  if(spec.world_seed!=null)$('scenario-world-seed').value=String(spec.world_seed);
   await loadScenarioPlayers();
   await loadScenarioHistory();
   await loadScenarioFutureGames();
@@ -676,6 +684,7 @@ $('scenario-reset').onclick=async function(){
   $('scenario-leverage-trials').value='500';
   $('scenario-leverage-limit').value='10';
   $('scenario-lineup-limit').value='4';
+  $('scenario-world-seed').value='2026';
   await loadScenarioPlayers();
   await loadScenarioHistory();
   await loadScenarioFutureGames();
@@ -904,6 +913,79 @@ $('scenario-run').onclick=async function(){
   }finally{button.disabled=false}
 };
 
+
+
+async function runScenarioWorld(){
+  const target=$('scenario-world-content');
+  const runButton=$('scenario-world-run');
+  const rerollButton=$('scenario-world-reroll');
+  runButton.disabled=true;rerollButton.disabled=true;
+  target.classList.add('empty');
+  target.innerHTML='<span>Sampling regular season, play-in, and playoff bracket…</span>';
+  try{
+    const body=buildScenarioRequest();
+    const seed=Number($('scenario-world-seed').value||2026);
+    const d=await json('/api/scenario/world?world_seed='+encodeURIComponent(seed),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    renderScenarioWorld(d);
+  }catch(e){
+    target.classList.add('empty');
+    target.innerHTML='<span>'+e.message+'</span>';
+  }finally{
+    runButton.disabled=false;rerollButton.disabled=false;
+  }
+}
+$('scenario-world-run').onclick=runScenarioWorld;
+$('scenario-world-reroll').onclick=async function(){
+  $('scenario-world-seed').value=String(Number($('scenario-world-seed').value||2026)+1);
+  await runScenarioWorld();
+};
+
+function worldStandingsTable(d,conference){
+  const rows=(d.standings||[]).filter(function(row){return row.conference===conference});
+  return '<div class="world-standings"><h3>'+conference.toUpperCase()+' FINAL STANDINGS</h3><div class="scroll"><table><thead><tr><th>#</th><th>Team</th><th>W-L</th><th>Playoff</th></tr></thead><tbody>'
+    +rows.map(function(row){
+      return '<tr class="'+(row.playoff_seed?'playoff-row':'')+'"><td>'+row.seed+'</td><td>'+row.team+'</td><td>'+row.wins+'-'+row.losses+'</td><td>'+(row.playoff_seed?('<span class="world-seed-badge">'+row.playoff_seed+'</span>'):'—')+'</td></tr>';
+    }).join('')
+    +'</tbody></table></div></div>';
+}
+function worldPlayInCard(row){
+  return '<div class="world-playin-card"><span>'+row.conference.toUpperCase()+' · '+row.stage.toUpperCase()+'</span><strong>'+row.away_team+' @ '+row.home_team+'</strong><small>Winner: <b>'+row.winner+'</b> · home '+pct(row.home_win_probability)+'</small></div>';
+}
+function worldSeriesCard(row){
+  const highScore=row.winner===row.higher_team?4:row.loser_games;
+  const lowScore=row.winner===row.lower_team?4:row.loser_games;
+  return '<div class="world-series-card '+(row.stage==='NBA Finals'?'world-finals-card':'')+'"><span class="series-conference">'+row.conference.toUpperCase()+(row.higher_seed?' · #'+row.higher_seed+' vs #'+row.lower_seed:'')+'</span>'
+    +'<div class="world-series-team '+(row.winner===row.higher_team?'winner':'loser')+'"><span>'+row.higher_team+'</span><em>'+highScore+'</em></div>'
+    +'<div class="world-series-team '+(row.winner===row.lower_team?'winner':'loser')+'"><span>'+row.lower_team+'</span><em>'+lowScore+'</em></div>'
+    +'</div>';
+}
+function worldRound(title,rows){
+  return '<div class="world-round"><h3>'+title.toUpperCase()+'</h3>'+rows.map(worldSeriesCard).join('')+'</div>';
+}
+function renderScenarioWorld(d){
+  $('scenario-world-champion').textContent=d.champion||'—';
+  $('scenario-world-east').textContent=d.east_champion||'—';
+  $('scenario-world-west').textContent=d.west_champion||'—';
+  $('scenario-world-games').textContent=Number((d.remaining_games||[]).length).toLocaleString();
+
+  const first=(d.series||[]).filter(function(row){return row.stage==='First Round'});
+  const semis=(d.series||[]).filter(function(row){return row.stage==='Conference Semifinals'});
+  const conferenceFinals=(d.series||[]).filter(function(row){return row.stage==='Conference Finals'});
+  const finals=(d.series||[]).filter(function(row){return row.stage==='NBA Finals'});
+  const forced=(d.remaining_games||[]).filter(function(row){return row.forced});
+
+  const target=$('scenario-world-content');
+  target.classList.remove('empty');
+  target.innerHTML=
+    '<div class="world-standings-grid">'+worldStandingsTable(d,'East')+worldStandingsTable(d,'West')+'</div>'
+    +'<div class="world-playin">'+(d.play_in_games||[]).map(worldPlayInCard).join('')+'</div>'
+    +'<div class="world-bracket">'+worldRound('First Round',first)+worldRound('Conference Semis',semis)+worldRound('Conference Finals',conferenceFinals)+worldRound('NBA Finals',finals)+'</div>'
+    +'<div class="world-champion-banner"><div><span>WORLD SEED '+d.seed+(forced.length?' · '+forced.length+' FORCED RESULT'+(forced.length===1?'':'S'):'')+'</span><strong>'+d.champion+' wins the NBA championship</strong></div><span>REROLL TO SAMPLE ANOTHER FUTURE</span></div>';
+}
 
 $('scenario-leverage-run').onclick=async function(){
   const button=$('scenario-leverage-run');button.disabled=true;
