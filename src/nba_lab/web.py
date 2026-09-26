@@ -1077,6 +1077,7 @@ def scenario_leverage(
             limit=limit,
             game_rating_adjustments=inputs.game_rating_adjustments,
             excluded_game_ids=set(inputs.forced_winners),
+            forced_winners=inputs.forced_winners,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
