@@ -1,9 +1,9 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0;
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,selectedImpactPlayerId=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
-const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['NBA LAB / SEASON LAB','Rewrite the season.'],matchup:['NBA LAB / MATCHUP LAB','Run the matchup.'],timeline:['NBA LAB / TIMELINE LAB','Replay how a team changed.'],model:['NBA LAB / MODEL LAB','Trust the model, then improve it.'],awards:['NBA LAB / AWARDS LAB','Replay the award race.'],impact:['NBA LAB / PLAYER IMPACT','Separate player from context.'],lineup:['NBA LAB / LINEUP LAB','Build the five.'],leverage:['NBA LAB / LEVERAGE LAB','Find the pivotal game.'],game:['NBA LAB / GAME REPLAY','Replay the game.']};
-function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards();if(name==='impact')loadImpact();if(name==='lineup')loadLineup();if(name==='game')loadReplay()}
+const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['NBA LAB / SEASON LAB','Rewrite the season.'],matchup:['NBA LAB / MATCHUP LAB','Run the matchup.'],timeline:['NBA LAB / TIMELINE LAB','Replay how a team changed.'],model:['NBA LAB / MODEL LAB','Trust the model, then improve it.'],awards:['NBA LAB / AWARDS LAB','Replay the award race.'],impact:['NBA LAB / PLAYER IMPACT','Separate player from context.'],lineup:['NBA LAB / LINEUP LAB','Build the five.'],leverage:['NBA LAB / LEVERAGE LAB','Find the pivotal game.'],game:['NBA LAB / GAME REPLAY','Replay the game.'],scenario:['NBA LAB / SCENARIO LAB','Compose an alternate world.']};
+function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards();if(name==='impact')loadImpact();if(name==='lineup')loadLineup();if(name==='game')loadReplay();if(name==='scenario')loadScenario()}
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>openView(b.dataset.view));document.querySelectorAll('[data-open]').forEach(c=>c.onclick=()=>openView(c.dataset.open));
 async function loadGames(){const team=$('game-team').value;const q=new URLSearchParams({before:$('asof').value,limit:'50'});if(team)q.set('team',team);const games=await json('/api/games?'+q);$('game').replaceChildren();games.forEach(g=>{const o=document.createElement('option');o.value=g.game_id;o.textContent=`${g.date} · ${g.away_team} ${g.away_score} @ ${g.home_team} ${g.home_score}`;$('game').append(o)});if(!games.length){const o=document.createElement('option');o.textContent='No completed games before this date';$('game').append(o)}}
 async function init(){meta=await json('/api/status');const official=meta.source.kind==='official_snapshot';$('source-short').textContent=official?'Official NBA snapshot':'Synthetic fallback';$('source-detail').textContent=`${meta.games} games · ${meta.teams} teams`;$('source-dot').style.background=official?'var(--green)':'var(--orange)';$('date-range').textContent=`${meta.date_min} → ${meta.date_max}`;teamOptions($('team'));teamOptions($('game-team'),true);teamOptions($('timeline-team'));teamOptions($('matchup-a'));teamOptions($('matchup-b'));$('team').value='NYK';$('timeline-team').value='NYK';$('matchup-a').value='NYK';$('matchup-b').value='BOS';await loadGames();try{const b=await json('/api/backtest');$('brier').textContent=b.brier.toFixed(3)}catch(e){$('brier').textContent='—'}}
@@ -301,7 +301,7 @@ $('impact-alpha').onchange=loadImpact;
 $('impact-search').oninput=()=>impactData&&renderImpactRows(impactData.players);
 async function loadImpactPath(playerId){
   const d=await json(`/api/impact/${playerId}/path`);
-  $('impact-detail-name').textContent=`${d.player.player_name} · ${d.player.team}`;
+  selectedImpactPlayerId=playerId;$('impact-detail-name').textContent=`${d.player.player_name} · ${d.player.team}`;$('impact-to-scenario').disabled=false;
   const current=impactData?.players.find(p=>p.player_id===playerId);
   $('impact-detail-meta').textContent=current?`Current α ${impactData.alpha.toFixed(0)} · RAPM ${current.impact_per_100>=0?'+':''}${current.impact_per_100.toFixed(2)} / 100 · ${Math.round(current.possessions).toLocaleString()} possessions`:'Regularization path';
   drawImpactPath(d.points);
@@ -319,6 +319,129 @@ function drawImpactScatter(players){
   const x=v=>pad+(W-2*pad)*(v/Math.max(1,maxX));const y=v=>H-pad-(H-2*pad)*((v-minY)/Math.max(.01,maxY-minY));const exposureCut=maxX*.25;
   el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="zero" x1="${pad}" y1="${y(0)}" x2="${W-pad}" y2="${y(0)}"/><line class="grid" x1="${x(exposureCut)}" y1="${pad}" x2="${x(exposureCut)}" y2="${H-pad}"/>${players.map(p=>`<circle class="scatter-point ${p.possessions<exposureCut?'low-sample':''}" cx="${x(p.possessions)}" cy="${y(p.impact_per_100)}" r="5"><title>${p.player_name} · ${p.team} · RAPM ${p.impact_per_100.toFixed(2)} · ${Math.round(p.possessions)} poss</title></circle>`).join('')}<text x="${pad}" y="${H-8}">0 poss</text><text x="${W-pad-50}" y="${H-8}">${Math.round(maxX)} poss</text><text x="3" y="${y(maxY)+3}">${maxY.toFixed(1)}</text><text x="3" y="${y(minY)+3}">${minY.toFixed(1)}</text></svg>`;
 }
+
+
+async function loadScenario(){
+  await loadScenarioPlayers();
+  if(!scenarioAbsences.length) addScenarioAbsence(selectedImpactPlayerId||((scenarioPlayers[0]||{}).player_id));
+  renderScenarioAbsences();
+}
+async function loadScenarioPlayers(){
+  const alpha=Number($('scenario-alpha').value||1000);
+  const d=await json('/api/impact?alpha='+alpha+'&limit=500');
+  scenarioPlayers=d.players||[];
+  scenarioAbsences=scenarioAbsences.map(function(a){
+    const p=scenarioPlayers.find(function(x){return x.player_id===a.player_id});
+    return Object.assign({},a,{impact_per_100:p?p.impact_per_100:a.impact_per_100});
+  });
+}
+function addScenarioAbsence(playerId){
+  if(scenarioAbsences.length>=3)return;
+  let available=scenarioPlayers.find(function(p){return p.player_id===playerId&&!scenarioAbsences.some(function(a){return a.player_id===p.player_id})});
+  if(!available)available=scenarioPlayers.find(function(p){return !scenarioAbsences.some(function(a){return a.player_id===p.player_id})});
+  if(!available)return;
+  scenarioAbsences.push({player_id:available.player_id,games_missed:8,minutes_per_game:34,replacement_impact_per_100:0,impact_per_100:available.impact_per_100});
+  renderScenarioAbsences();
+}
+function renderScenarioAbsences(){
+  $('scenario-count').textContent=scenarioAbsences.length;
+  $('scenario-add').disabled=scenarioAbsences.length>=3;
+  $('scenario-absence-list').innerHTML=scenarioAbsences.map(function(a,i){
+    const options=scenarioPlayers.map(function(p){
+      return '<option value="'+p.player_id+'" '+(p.player_id===a.player_id?'selected':'')+'>'+p.player_name+' · '+p.team+' · '+(p.impact_per_100>=0?'+':'')+p.impact_per_100.toFixed(2)+'</option>';
+    }).join('');
+    const player=scenarioPlayers.find(function(p){return p.player_id===a.player_id});
+    return '<div class="absence-card" data-absence-index="'+i+'">'
+      +'<div class="absence-head"><strong>ABSENCE '+String(i+1).padStart(2,'0')+'</strong><button data-remove-absence="'+i+'">×</button></div>'
+      +'<label>Player<select data-absence-field="player_id" data-index="'+i+'">'+options+'</select></label>'
+      +'<div class="absence-grid">'
+      +'<label>Games missed<input type="number" min="1" max="82" value="'+a.games_missed+'" data-absence-field="games_missed" data-index="'+i+'"></label>'
+      +'<label>Minutes / game<input type="number" min="1" max="48" step="1" value="'+a.minutes_per_game+'" data-absence-field="minutes_per_game" data-index="'+i+'"></label>'
+      +'</div>'
+      +'<label>Replacement RAPM / 100<input type="number" min="-10" max="10" step=".25" value="'+a.replacement_impact_per_100+'" data-absence-field="replacement_impact_per_100" data-index="'+i+'"></label>'
+      +'<div class="absence-impact-hint">'+(player?(player.player_name+': RAPM '+(player.impact_per_100>=0?'+':'')+player.impact_per_100.toFixed(2)+' / 100 · '+Math.round(player.possessions).toLocaleString()+' possessions'):'Select a player.')+'</div>'
+      +'</div>';
+  }).join('');
+  document.querySelectorAll('[data-remove-absence]').forEach(function(b){b.onclick=function(){scenarioAbsences.splice(Number(b.dataset.removeAbsence),1);renderScenarioAbsences()}});
+  document.querySelectorAll('[data-absence-field]').forEach(function(el){el.onchange=function(){
+    const i=Number(el.dataset.index),field=el.dataset.absenceField;
+    let value=el.value;if(field!=='player_id')value=Number(value);
+    scenarioAbsences[i][field]=value;
+    if(field==='player_id'){const p=scenarioPlayers.find(function(x){return x.player_id===value});scenarioAbsences[i].impact_per_100=p?p.impact_per_100:0}
+    renderScenarioAbsences();
+  }});
+}
+$('scenario-add').onclick=function(){addScenarioAbsence()};
+$('scenario-alpha').onchange=async function(){await loadScenarioPlayers();renderScenarioAbsences()};
+$('impact-to-scenario').onclick=function(){
+  if(!selectedImpactPlayerId)return;
+  if(!scenarioAbsences.some(function(a){return a.player_id===selectedImpactPlayerId})){
+    if(scenarioAbsences.length>=3)scenarioAbsences.shift();
+    const p=(impactData&&impactData.players||[]).find(function(x){return x.player_id===selectedImpactPlayerId});
+    scenarioAbsences.push({player_id:selectedImpactPlayerId,games_missed:8,minutes_per_game:34,replacement_impact_per_100:0,impact_per_100:p?p.impact_per_100:0});
+  }
+  openView('scenario');
+};
+$('scenario-run').onclick=async function(){
+  const button=$('scenario-run');button.disabled=true;
+  try{
+    const ids=scenarioAbsences.map(function(a){return a.player_id});
+    if(new Set(ids).size!==ids.length)throw Error('Each player can appear only once in a scenario.');
+    if(!scenarioAbsences.length)throw Error('Add at least one player absence.');
+    const body={
+      as_of:$('scenario-date').value,
+      trials:Number($('scenario-trials').value),
+      seed:2026,
+      alpha:Number($('scenario-alpha').value),
+      absences:scenarioAbsences.map(function(a){return {
+        player_id:a.player_id,
+        games_missed:Number(a.games_missed),
+        minutes_per_game:Number(a.minutes_per_game),
+        replacement_impact_per_100:Number(a.replacement_impact_per_100)
+      }})
+    };
+    const d=await json('/api/scenario/player-absence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    scenarioLast=d;renderScenario(d);
+  }catch(e){
+    $('scenario-effects').classList.add('empty');$('scenario-effects').innerHTML='<span>'+e.message+'</span>';
+  }finally{button.disabled=false}
+};
+function renderScenario(d){
+  const deltas=d.deltas||[];
+  const altered=Object.fromEntries(d.altered.teams.map(function(x){return [x.team,x]}));
+  $('scenario-count').textContent=d.player_absences.length;$('scenario-sims').textContent=d.trials.toLocaleString();
+  const biggestWin=[].concat(deltas).sort(function(a,b){return Math.abs(b.expected_wins_delta)-Math.abs(a.expected_wins_delta)})[0];
+  const biggestTitle=[].concat(deltas).sort(function(a,b){return Math.abs(b.championship_probability_delta)-Math.abs(a.championship_probability_delta)})[0];
+  $('scenario-win-swing').textContent=biggestWin?(biggestWin.team+' '+signed(biggestWin.expected_wins_delta)):'—';
+  $('scenario-title-swing').textContent=biggestTitle?(biggestTitle.team+' '+(biggestTitle.championship_probability_delta>=0?'+':'')+(100*biggestTitle.championship_probability_delta).toFixed(1)+' pts'):'—';
+  $('scenario-effects').classList.remove('empty');
+  $('scenario-effects').innerHTML=d.player_absences.map(function(e){
+    return '<div class="scenario-effect"><span>'+e.player_name+' · '+e.team+' · '+e.games_missed+' games</span>'
+      +'<strong>'+(e.margin_delta_per_game>=0?'+':'')+e.margin_delta_per_game.toFixed(2)+' pts/game → '+(e.elo_delta_per_game>=0?'+':'')+e.elo_delta_per_game.toFixed(0)+' Elo</strong>'
+      +'<small>RAPM '+(e.impact_per_100>=0?'+':'')+e.impact_per_100.toFixed(2)+' → replacement '+(e.replacement_impact_per_100>=0?'+':'')+e.replacement_impact_per_100.toFixed(2)+' · '+e.minutes_per_game.toFixed(0)+' MPG · '+e.affected_game_ids.length+' scheduled games affected</small></div>';
+  }).join('');
+  renderScenarioBars();
+  $('scenario-rows').innerHTML=d.baseline.teams.map(function(x){
+    const y=altered[x.team],z=deltas.find(function(v){return v.team===x.team});
+    return '<tr><td>'+x.team+'</td><td>'+x.expected_wins.toFixed(1)+' → '+y.expected_wins.toFixed(1)+'</td><td>'+pct(x.playoffs_probability)+' → '+pct(y.playoffs_probability)+'</td><td>'+pct(x.championship_probability)+' → '+pct(y.championship_probability)+'</td>'
+      +'<td class="'+(z.expected_wins_delta>=0?'positive':'negative')+'">'+signed(z.expected_wins_delta)+'</td>'
+      +'<td class="'+(z.playoffs_probability_delta>=0?'positive':'negative')+'">'+(z.playoffs_probability_delta>=0?'+':'')+(100*z.playoffs_probability_delta).toFixed(1)+' pts</td>'
+      +'<td class="'+(z.championship_probability_delta>=0?'positive':'negative')+'">'+(z.championship_probability_delta>=0?'+':'')+(100*z.championship_probability_delta).toFixed(1)+' pts</td></tr>';
+  }).join('');
+}
+function renderScenarioBars(){
+  if(!scenarioLast)return;
+  const metric=$('scenario-metric').value;
+  const rows=[].concat(scenarioLast.deltas).sort(function(a,b){return Math.abs(b[metric])-Math.abs(a[metric])}).slice(0,16);
+  const max=Math.max.apply(null,rows.map(function(x){return Math.abs(x[metric])}).concat([.001]));
+  $('scenario-bars').classList.remove('empty');
+  $('scenario-bars').innerHTML=rows.map(function(x){
+    const value=x[metric],h=42*Math.abs(value)/max;
+    const title=x.team+' · '+(metric.includes('probability')?(100*value).toFixed(2)+' pts':value.toFixed(2));
+    return '<div class="scenario-bar-item"><div class="scenario-bar-track"><div class="scenario-bar-fill '+(value>=0?'pos':'neg')+'" style="height:'+h+'px"><title>'+title+'</title></div></div><label>'+x.team+'</label></div>';
+  }).join('');
+}
+$('scenario-metric').onchange=renderScenarioBars;
 
 async function loadAwards(){
   if(!awardHistory.length){
