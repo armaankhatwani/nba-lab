@@ -13,13 +13,34 @@ def _clock_from_elapsed(elapsed: float) -> tuple[int, float]:
     return period, clock
 
 
-def synthetic_replay_snapshots(games: list[Game], limit: int = 12) -> dict[str, ReplaySnapshot]:
-    """Create clearly labeled score checkpoints for offline product testing."""
+def synthetic_replay_snapshots(
+    games: list[Game],
+    limit: int = 12,
+    preferred_teams: set[str] | None = None,
+) -> dict[str, ReplaySnapshot]:
+    """Create clearly labeled score checkpoints for offline product testing.
+
+    When player-impact fixtures are available, prefer games where both teams
+    have roster context so lineup interventions are demonstrable offline.
+    """
     finals = sorted(
         (game for game in games if game.is_final),
         key=lambda game: (game.game_date, game.game_id),
         reverse=True,
-    )[:limit]
+    )
+    if preferred_teams:
+        supported = [
+            game
+            for game in finals
+            if game.home_team in preferred_teams and game.away_team in preferred_teams
+        ]
+        unsupported = [
+            game
+            for game in finals
+            if game not in supported
+        ]
+        finals = supported + unsupported
+    finals = finals[:limit]
     snapshots = {}
     for game in finals:
         events = []
