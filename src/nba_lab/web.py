@@ -834,6 +834,52 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
         seed=request.seed,
         game_rating_adjustments=inputs.impact_upper_adjustments,
     )
+    baseline_by = {row.team: row for row in baseline.teams}
+    point_by = {row.team: row for row in point.teams}
+    low_by = {row.team: row for row in impact_lower.teams}
+    high_by = {row.team: row for row in impact_upper.teams}
+
+    def stable_direction(values: list[float], tolerance: float = 1e-12) -> bool:
+        signs = {
+            1 if value > tolerance else -1
+            for value in values
+            if abs(value) > tolerance
+        }
+        return len(signs) <= 1
+
+    team_sensitivity = []
+    for team in sorted(point_by):
+        base = baseline_by[team]
+        variants = [low_by[team], point_by[team], high_by[team]]
+        wins = [row.expected_wins - base.expected_wins for row in variants]
+        playoffs = [
+            row.playoffs_probability - base.playoffs_probability
+            for row in variants
+        ]
+        titles = [
+            row.championship_probability - base.championship_probability
+            for row in variants
+        ]
+        team_sensitivity.append({
+            "team": team,
+            "expected_wins_deltas": wins,
+            "playoffs_probability_deltas": playoffs,
+            "championship_probability_deltas": titles,
+            "expected_wins_direction_stable": stable_direction(wins),
+            "playoffs_direction_stable": stable_direction(playoffs),
+            "championship_direction_stable": stable_direction(titles),
+            "expected_wins_range": [min(wins), max(wins)],
+            "playoffs_probability_range": [min(playoffs), max(playoffs)],
+            "championship_probability_range": [min(titles), max(titles)],
+        })
+    team_sensitivity.sort(
+        key=lambda row: (
+            abs(row["expected_wins_deltas"][1])
+            + 8 * abs(row["championship_probability_deltas"][1])
+        ),
+        reverse=True,
+    )
+
     return {
         "as_of": request.as_of.isoformat(),
         "trials": sensitivity_trials,
@@ -841,6 +887,7 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
         "point": _serialize(point),
         "impact_lower": _serialize(impact_lower),
         "impact_upper": _serialize(impact_upper),
+        "team_sensitivity": team_sensitivity,
         "definition": "Sensitivity worlds move every player-impact intervention to its approximate lower or upper model-based signal while preserving the same history branch and Monte Carlo seed.",
         "warning": "These are componentwise model-sensitivity worlds, not confidence intervals on season outcomes.",
     }
