@@ -106,3 +106,46 @@ def test_trade_adjusts_both_teams_in_opposite_directions():
     deltas = {row.team: row for row in result.deltas}
     assert deltas[strong_team].expected_wins_delta < 0
     assert deltas[weak_team].expected_wins_delta > 0
+
+
+def test_absence_translation_carries_rapm_uncertainty_band():
+    games = synthetic_demo_games()
+    snapshot = synthetic_impact_snapshot()
+    rapm = fit_rapm(list(snapshot.stints), alpha=1000)
+    player = max(rapm.players, key=lambda row: row.impact_per_100)
+    adjustments, effects = build_player_absence_adjustments(
+        games,
+        date(2026, 1, 15),
+        snapshot,
+        rapm,
+        [PlayerAbsence(player.player_id, games_missed=4, minutes_per_game=36)],
+    )
+    effect = effects[0]
+    assert effect.impact_lower_80 <= effect.impact_per_100 <= effect.impact_upper_80
+    assert effect.margin_delta_low_80 <= effect.margin_delta_per_game <= effect.margin_delta_high_80
+    assert effect.elo_delta_low_80 <= effect.elo_delta_per_game <= effect.elo_delta_high_80
+    assert adjustments
+
+
+def test_trade_translation_carries_symmetric_impact_uncertainty():
+    games = synthetic_demo_games()
+    snapshot = synthetic_impact_snapshot()
+    rapm = fit_rapm(list(snapshot.stints), alpha=1000)
+    ranked = sorted(rapm.players, key=lambda row: row.impact_per_100, reverse=True)
+    a = ranked[0]
+    team_a = snapshot.players[a.player_id].team
+    b = next(row for row in reversed(ranked) if snapshot.players[row.player_id].team != team_a)
+    result = simulate_scenario(
+        games,
+        date(2026, 1, 15),
+        snapshot,
+        rapm,
+        [],
+        trades=[TradeIntervention(a.player_id, b.player_id, minutes_per_game=34)],
+        trials=100,
+        seed=27,
+    )
+    effect = result.trades[0]
+    assert effect.impact_difference_standard_error >= 0
+    assert effect.team_a_margin_delta_low_80 <= effect.team_a_margin_delta_per_game <= effect.team_a_margin_delta_high_80
+    assert effect.team_b_margin_delta_low_80 <= effect.team_b_margin_delta_per_game <= effect.team_b_margin_delta_high_80
