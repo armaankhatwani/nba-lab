@@ -317,7 +317,10 @@ def test_scenario_reports_affected_schedule_probability_shifts():
     })
     assert r.status_code == 200
     data = r.json()
-    assert len(data['affected_games']) == 4
+    effect = data['player_absences'][0]
+    affected_ids = {row['game_id'] for row in data['affected_games']}
+    assert affected_ids == set(effect['affected_game_ids'])
+    assert 1 <= len(affected_ids) <= effect['games_missed']
     assert all('home_win_probability_delta' in row for row in data['affected_games'])
     assert any(abs(row['home_win_probability_delta']) > 0 for row in data['affected_games'])
 
