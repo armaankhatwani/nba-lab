@@ -31,9 +31,14 @@ def evaluate_game_leverage(
     trials: int = 1000,
     seed: int = 2026,
     game_rating_adjustments: dict[str, dict[str, float]] | None = None,
+    forced_winners: dict[str, str] | None = None,
 ) -> GameLeverage:
     if game.game_date < as_of:
         raise ValueError("leverage game must be on or after the as-of date")
+
+    existing_forced = dict(forced_winners or {})
+    home_forced = {**existing_forced, game.game_id: game.home_team}
+    away_forced = {**existing_forced, game.game_id: game.away_team}
 
     home_world = simulate_remaining_season(
         games,
@@ -41,7 +46,7 @@ def evaluate_game_leverage(
         trials=trials,
         seed=seed,
         game_rating_adjustments=game_rating_adjustments,
-        forced_winners={game.game_id: game.home_team},
+        forced_winners=home_forced,
     )
     away_world = simulate_remaining_season(
         games,
@@ -49,7 +54,7 @@ def evaluate_game_leverage(
         trials=trials,
         seed=seed,
         game_rating_adjustments=game_rating_adjustments,
-        forced_winners={game.game_id: game.away_team},
+        forced_winners=away_forced,
     )
     home = _team_map(home_world)
     away = _team_map(away_world)
@@ -95,6 +100,7 @@ def rank_upcoming_games(
     limit: int = 12,
     game_rating_adjustments: dict[str, dict[str, float]] | None = None,
     excluded_game_ids: set[str] | None = None,
+    forced_winners: dict[str, str] | None = None,
 ) -> tuple[GameLeverage, ...]:
     excluded = excluded_game_ids or set()
     upcoming = sorted(
@@ -113,6 +119,7 @@ def rank_upcoming_games(
             trials=trials,
             seed=seed,
             game_rating_adjustments=game_rating_adjustments,
+            forced_winners=forced_winners,
         )
         for game in upcoming
     ]
