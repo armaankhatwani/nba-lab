@@ -323,9 +323,20 @@ function drawImpactScatter(players){
 
 async function loadScenario(){
   await loadScenarioPlayers();
+  await loadScenarioHistory();
   if(!scenarioAbsences.length) addScenarioAbsence(selectedImpactPlayerId||((scenarioPlayers[0]||{}).player_id));
   renderScenarioAbsences();
 }
+async function loadScenarioHistory(){
+  const select=$('scenario-flip-game');
+  const previous=select.value;
+  const rows=await json('/api/games?before='+$('scenario-date').value+'&limit=100');
+  select.innerHTML='<option value="">No game flip</option>'+rows.map(function(g){
+    return '<option value="'+g.game_id+'">'+g.date+' · '+g.away_team+' '+g.away_score+' @ '+g.home_team+' '+g.home_score+'</option>';
+  }).join('');
+  if(rows.some(function(g){return g.game_id===previous}))select.value=previous;
+}
+$('scenario-date').onchange=loadScenarioHistory;
 async function loadScenarioPlayers(){
   const alpha=Number($('scenario-alpha').value||1000);
   const d=await json('/api/impact?alpha='+alpha+'&limit=500');
@@ -393,6 +404,7 @@ $('scenario-run').onclick=async function(){
       trials:Number($('scenario-trials').value),
       seed:2026,
       alpha:Number($('scenario-alpha').value),
+      flipped_game_ids:$('scenario-flip-game').value?[$('scenario-flip-game').value]:[],
       absences:scenarioAbsences.map(function(a){return {
         player_id:a.player_id,
         games_missed:Number(a.games_missed),
@@ -415,11 +427,16 @@ function renderScenario(d){
   $('scenario-win-swing').textContent=biggestWin?(biggestWin.team+' '+signed(biggestWin.expected_wins_delta)):'—';
   $('scenario-title-swing').textContent=biggestTitle?(biggestTitle.team+' '+(biggestTitle.championship_probability_delta>=0?'+':'')+(100*biggestTitle.championship_probability_delta).toFixed(1)+' pts'):'—';
   $('scenario-effects').classList.remove('empty');
-  $('scenario-effects').innerHTML=d.player_absences.map(function(e){
+  const historyCards=(d.historical_flips||[]).map(function(flip){
+    return '<div class="scenario-effect"><span>HISTORICAL BRANCH · '+flip.game_date+'</span><strong>'+flip.original_winner+' → '+flip.flipped_winner+'</strong><small>'+flip.away_team+' @ '+flip.home_team+' · completed result reversed before rebuilding the point-in-time state</small></div>';
+  });
+  const absenceCards=d.player_absences.map(function(e){
     return '<div class="scenario-effect"><span>'+e.player_name+' · '+e.team+' · '+e.games_missed+' games</span>'
       +'<strong>'+(e.margin_delta_per_game>=0?'+':'')+e.margin_delta_per_game.toFixed(2)+' pts/game → '+(e.elo_delta_per_game>=0?'+':'')+e.elo_delta_per_game.toFixed(0)+' Elo</strong>'
       +'<small>RAPM '+(e.impact_per_100>=0?'+':'')+e.impact_per_100.toFixed(2)+' → replacement '+(e.replacement_impact_per_100>=0?'+':'')+e.replacement_impact_per_100.toFixed(2)+' · '+e.minutes_per_game.toFixed(0)+' MPG · '+e.affected_game_ids.length+' scheduled games affected</small></div>';
-  }).join('');
+  });
+  $('scenario-effects').innerHTML=historyCards.concat(absenceCards).join('');
+  renderScenarioAwardRipple(d);
   renderScenarioBars();
   $('scenario-rows').innerHTML=d.baseline.teams.map(function(x){
     const y=altered[x.team],z=deltas.find(function(v){return v.team===x.team});
@@ -429,6 +446,23 @@ function renderScenario(d){
       +'<td class="'+(z.championship_probability_delta>=0?'positive':'negative')+'">'+(z.championship_probability_delta>=0?'+':'')+(100*z.championship_probability_delta).toFixed(1)+' pts</td></tr>';
   }).join('');
 }
+
+function renderScenarioAwardRipple(d){
+  const panel=$('scenario-award-panel');
+  if(!d.award_ripple||!d.award_ripple.length){panel.hidden=true;return}
+  panel.hidden=false;
+  panel.dataset.asof=d.as_of;
+  $('scenario-award-ripple').innerHTML=d.award_ripple.slice(0,8).map(function(p){
+    const up=p.race_score_delta>=0;
+    return '<div class="award-ripple-card"><span>'+p.team+' · '+p.player_name+'</span><strong class="'+(up?'up':'down')+'">'+signed(p.race_score_delta)+' race score</strong><small>share '+(p.race_share_delta>=0?'+':'')+(100*p.race_share_delta).toFixed(2)+' pts</small></div>';
+  }).join('');
+}
+$('scenario-open-awards').onclick=function(){
+  const date=$('scenario-award-panel').dataset.asof;
+  if(date)$('award-date').value=date;
+  openView('awards');
+};
+
 function renderScenarioBars(){
   if(!scenarioLast)return;
   const metric=$('scenario-metric').value;
