@@ -5,6 +5,7 @@ from nba_lab.demo_impact import synthetic_impact_snapshot
 from nba_lab.impact import fit_rapm
 from nba_lab.scenario import (
     PlayerAbsence,
+    TradeIntervention,
     build_player_absence_adjustments,
     elo_delta_for_margin,
     simulate_scenario,
@@ -77,3 +78,31 @@ def test_historical_flip_and_absence_compose_in_one_world():
     assert len(result.historical_flips) == 1
     assert result.historical_flips[0].original_winner != result.historical_flips[0].flipped_winner
     assert result.player_absences[0].affected_game_ids
+
+
+def test_trade_adjusts_both_teams_in_opposite_directions():
+    games = synthetic_demo_games()
+    snapshot = synthetic_impact_snapshot()
+    rapm = fit_rapm(list(snapshot.stints), alpha=1000)
+    ranked = sorted(rapm.players, key=lambda row: row.impact_per_100, reverse=True)
+    strong = ranked[0]
+    strong_team = snapshot.players[strong.player_id].team
+    weak = next(
+        row for row in reversed(ranked)
+        if snapshot.players[row.player_id].team != strong_team
+    )
+    weak_team = snapshot.players[weak.player_id].team
+    result = simulate_scenario(
+        games,
+        date(2026, 1, 15),
+        snapshot,
+        rapm,
+        [],
+        trades=[TradeIntervention(strong.player_id, weak.player_id, minutes_per_game=36)],
+        trials=500,
+        seed=14,
+    )
+    assert len(result.trades) == 1
+    deltas = {row.team: row for row in result.deltas}
+    assert deltas[strong_team].expected_wins_delta < 0
+    assert deltas[weak_team].expected_wins_delta > 0
