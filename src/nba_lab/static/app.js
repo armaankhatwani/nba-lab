@@ -724,7 +724,7 @@ $('scenario-run').onclick=async function(){
   const button=$('scenario-run');button.disabled=true;
   try{
     const body=buildScenarioRequest();validateScenarioRequest(body);
-    const d=await json('/api/scenario/player-absence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await json('/api/scenario/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     scenarioLast=d;scenarioLastRequest=body;renderScenario(d);
   }catch(e){
     $('scenario-effects').classList.add('empty');$('scenario-effects').innerHTML='<span>'+e.message+'</span>';
