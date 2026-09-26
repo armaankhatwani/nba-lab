@@ -1,7 +1,7 @@
 from nba_lab.impact import fit_rapm
 from nba_lab.impact_source import ImpactPlayer, ImpactSnapshot
 from nba_lab.impact import Stint
-from nba_lab.lineup import compare_lineups, estimate_lineup
+from nba_lab.lineup import compare_lineups, estimate_lineup, optimize_lineups
 
 
 def snapshot():
@@ -43,3 +43,21 @@ def test_lineup_matchup_is_antisymmetric():
     ab = compare_lineups(s, rapm, a, b)
     ba = compare_lineups(s, rapm, b, a)
     assert abs(ab.neutral_margin_per_100 + ba.neutral_margin_per_100) < 1e-12
+
+
+def test_lineup_estimate_reports_rapm_sensitivity_band():
+    s = snapshot()
+    rapm = fit_rapm(list(s.stints), alpha=100)
+    result = estimate_lineup(s, rapm, ("1","2","3","4","5"), prior_possessions=100)
+    assert result.rapm_lower_80 <= result.additive_rapm <= result.rapm_upper_80
+    assert result.blended_lower_80 <= result.blended_net_rating <= result.blended_upper_80
+
+
+def test_lineup_optimizer_enumerates_and_ranks_candidate_fives():
+    s = snapshot()
+    rapm = fit_rapm(list(s.stints), alpha=100)
+    players = tuple(s.players)
+    rows = optimize_lineups(s, rapm, players, prior_possessions=100, top_k=5)
+    assert len(rows) == 5
+    assert all(len(row.players) == 5 for row in rows)
+    assert all(rows[i].blended_net_rating >= rows[i+1].blended_net_rating for i in range(len(rows)-1))
