@@ -22,7 +22,7 @@ from .demo_awards import synthetic_player_games
 from .diagnostics import calibration_curve
 from .elo import EloModel
 from .matchup import simulate_matchup
-from .model_selection import evaluate_elo_surface
+from .model_selection import evaluate_elo_surface, evaluate_model_families
 from .impact import fit_rapm
 from .impact_source import load_impact_snapshot, snapshot_as_of
 from .lineup import compare_lineups, optimize_lineups
@@ -1427,6 +1427,11 @@ def timeline(team: str):
             "largest_loss": min((point.margin for point in points), default=0),
         },
     }
+
+
+@app.get("/api/model/families")
+def model_families():
+    return asdict(evaluate_model_families(GAMES))
 
 
 @app.get("/api/model/elo-surface")
