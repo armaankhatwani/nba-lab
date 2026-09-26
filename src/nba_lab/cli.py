@@ -119,7 +119,7 @@ def sync_bundle():
     parser.add_argument("--season", required=True, help="Season such as 2025-26")
     parser.add_argument("--output-dir", default="data")
     parser.add_argument("--replay-count", type=int, default=8)
-    parser.add_argument("--replay-team", action="append", help="Prefer replay games involving this team; repeatable")
+    parser.add_argument("--replay-team", action="append", help="Limit replay selection to games involving this team; repeatable")
     parser.add_argument("--impact-games", type=int, default=0, help="Build RAPM data from this many selected games; 0 skips")
     parser.add_argument("--impact-source", choices=["file", "web"], default="web")
     parser.add_argument("--impact-team", action="append", help="Limit RAPM ingestion to games involving this team; repeatable")
