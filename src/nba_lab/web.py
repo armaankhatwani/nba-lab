@@ -98,7 +98,8 @@ def _load_replays():
     snapshots = load_replay_directory(directory)
     if snapshots:
         return snapshots, {"kind": "official_snapshot", "path": str(directory)}
-    return synthetic_replay_snapshots(GAMES), {
+    impact_teams = {player.team for player in IMPACT_SNAPSHOT.players.values()}
+    return synthetic_replay_snapshots(GAMES, preferred_teams=impact_teams), {
         "kind": "synthetic_demo",
         "warning": "Synthetic replay checkpoints for offline testing. Sync PlayByPlayV3 snapshots for real events.",
     }
