@@ -73,6 +73,15 @@ class HistoricalFlipEffect:
 
 
 @dataclass(frozen=True)
+class ScenarioInputs:
+    altered_games: tuple[Game, ...]
+    game_rating_adjustments: dict[str, dict[str, float]]
+    player_absences: tuple[PlayerAbsenceEffect, ...]
+    historical_flips: tuple[HistoricalFlipEffect, ...]
+    trades: tuple[TradeEffect, ...]
+
+
+@dataclass(frozen=True)
 class ScenarioResult:
     as_of: date
     trials: int
@@ -234,7 +243,7 @@ def _merge_game_adjustments(
     return merged
 
 
-def simulate_scenario(
+def build_scenario_inputs(
     games: list[Game],
     as_of: date,
     impact_snapshot: ImpactSnapshot,
@@ -242,9 +251,7 @@ def simulate_scenario(
     absences: list[PlayerAbsence],
     flipped_game_ids: list[str] | None = None,
     trades: list[TradeIntervention] | None = None,
-    trials: int = 5000,
-    seed: int = 2026,
-) -> ScenarioResult:
+) -> ScenarioInputs:
     altered_games = list(games)
     flip_effects: list[HistoricalFlipEffect] = []
     for game_id in flipped_game_ids or []:
@@ -261,22 +268,51 @@ def simulate_scenario(
             flipped_winner=flipped.winner or "",
         ))
 
-    absence_adjustments, effects = build_player_absence_adjustments(
+    absence_adjustments, absence_effects = build_player_absence_adjustments(
         altered_games, as_of, impact_snapshot, rapm, absences
     )
     trade_adjustments, trade_effects = build_trade_adjustments(
         altered_games, as_of, impact_snapshot, rapm, trades or []
     )
     adjustments = _merge_game_adjustments(absence_adjustments, trade_adjustments)
+    return ScenarioInputs(
+        altered_games=tuple(altered_games),
+        game_rating_adjustments=adjustments,
+        player_absences=absence_effects,
+        historical_flips=tuple(flip_effects),
+        trades=trade_effects,
+    )
+
+
+def simulate_scenario(
+    games: list[Game],
+    as_of: date,
+    impact_snapshot: ImpactSnapshot,
+    rapm: RapmResult,
+    absences: list[PlayerAbsence],
+    flipped_game_ids: list[str] | None = None,
+    trades: list[TradeIntervention] | None = None,
+    trials: int = 5000,
+    seed: int = 2026,
+) -> ScenarioResult:
+    inputs = build_scenario_inputs(
+        games,
+        as_of,
+        impact_snapshot,
+        rapm,
+        absences,
+        flipped_game_ids=flipped_game_ids,
+        trades=trades,
+    )
     baseline = simulate_remaining_season(
         games, as_of, trials=trials, seed=seed
     )
     altered = simulate_remaining_season(
-        altered_games,
+        list(inputs.altered_games),
         as_of,
         trials=trials,
         seed=seed,
-        game_rating_adjustments=adjustments,
+        game_rating_adjustments=inputs.game_rating_adjustments,
     )
     return ScenarioResult(
         as_of=as_of,
@@ -284,7 +320,7 @@ def simulate_scenario(
         baseline=baseline,
         altered=altered,
         deltas=build_team_deltas(baseline, altered),
-        player_absences=effects,
-        historical_flips=tuple(flip_effects),
-        trades=trade_effects,
+        player_absences=inputs.player_absences,
+        historical_flips=inputs.historical_flips,
+        trades=inputs.trades,
     )
