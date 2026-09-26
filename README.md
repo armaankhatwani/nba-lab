@@ -23,10 +23,10 @@ Complexity has to earn promotion through chronological evaluation or by unlockin
 ## Live labs
 
 - **Season Lab** — simulate the remaining regular season, play-in, playoffs, Finals, and historical game-result branches.
-- **Scenario Lab** — compose history, forced future results, availability, and RAPM-backed trade interventions; compare season distributions; propagate the same world into MVP futures, pivotal-game rankings, and one fully sampled standings/playoff bracket; copy a reproducible scenario link.
+- **Scenario Lab** — compose history, forced future results, availability, and RAPM-backed trade interventions; compare season distributions; propagate the same world into MVP futures, pivotal-game rankings, sampled standings/playoff brackets, matchup probabilities, and game-specific closing-five recommendations; copy a reproducible scenario link.
 - **Matchup Lab** — simulate one game or a best-of-3/5/7 from a frozen point-in-time team state.
 - **Timeline Lab** — replay a team's rating and record game by game.
-- **Model Lab** — inspect chronological Brier score, log loss, accuracy, calibration, and the promotion baseline.
+- **Model Lab** — inspect chronological Brier score, log loss, calibration, held-out Elo parameter tuning, and an experimental score-aware Elo family gate with paired holdout diagnostics.
 - **Awards Lab** — replay the point-in-time MVP race and simulate remaining-season award finishes.
 - **Player Impact** — fit ridge RAPM from normalized lineup stints and inspect shrinkage/exposure diagnostics.
 - **Lineup Lab** — estimate five-man units from additive RAPM priors blended with observed lineup evidence.
@@ -81,6 +81,7 @@ Scenario Lab currently supports:
 - point-in-time MVP race ripple from altered history;
 - optional simulated MVP-finish comparison under the same scenario;
 - deterministic **Reroll Future** worlds with final standings, play-in, full playoff bracket, and champion;
+- affected-game drilldowns into the altered matchup prior and the two scenario rosters' top modeled closing fives;
 - versioned share links that restore the full composer and world seed.
 
 A traded player cannot also be marked absent in the same scenario yet because the timing semantics would be ambiguous.
