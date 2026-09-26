@@ -9,6 +9,7 @@ from .domain import Game
 
 _PROFILES = [
     ("203999","Nikola Jokic","DEN",30.2,12.4,10.1,1.4,.8,3.3,18.8,6.4,35.5),
+    ("demo-brunson","Jalen Brunson","NYK",28.1,3.4,7.2,.9,.2,2.6,20.2,6.9,35.8),
     ("1628983","Shai Gilgeous-Alexander","OKC",32.1,5.3,6.5,1.7,1.0,2.5,20.6,9.2,34.8),
     ("1629029","Luka Doncic","LAL",29.4,8.7,8.9,1.4,.5,4.0,21.1,8.8,35.9),
     ("203507","Giannis Antetokounmpo","MIL",30.8,11.6,6.2,1.1,1.1,3.5,19.9,11.0,34.2),
