@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
-from nba_lab.impact_sync import possession_to_stint
+from datetime import date
+
+from nba_lab.domain import Game
+from nba_lab.impact_sync import possession_to_stint, select_impact_games
 
 
 class Event:
@@ -41,3 +44,22 @@ def test_mid_possession_lineup_change_is_rejected():
 def test_non_five_player_lineup_is_rejected():
     lineups = {1: "1-2-3-4", 2: "6-7-8-9-10"}
     assert possession_to_stint(possession(lineups, {1: 0, 2: 0}), 1, 2) is None
+
+
+def test_select_impact_games_filters_final_games_by_team_before_limit():
+    games = [
+        Game("1", date(2025, 1, 1), "BOS", "NYK", 100, 99),
+        Game("2", date(2025, 1, 2), "DEN", "OKC", 110, 108),
+        Game("3", date(2025, 1, 3), "NYK", "BOS", 101, 100),
+        Game("4", date(2025, 1, 4), "BOS", "DEN", None, None),
+    ]
+    selected, teams = select_impact_games(games, max_games=1, teams={"bos"})
+    assert teams == {"BOS"}
+    assert [game.game_id for game in selected] == ["1"]
+
+
+def test_select_impact_games_rejects_negative_limit():
+    import pytest
+
+    with pytest.raises(ValueError, match="non-negative"):
+        select_impact_games([], max_games=-1)
