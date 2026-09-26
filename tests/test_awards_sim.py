@@ -52,3 +52,15 @@ def test_award_future_can_override_player_team():
     )
     row=next(c for c in result.candidates if c.player_id=="a")
     assert row.team=="BOS"
+
+
+def test_award_future_supports_forced_game_result():
+    games,logs=data()
+    future=next(g for g in games if g.game_date>date(2026,1,6))
+    baseline=simulate_award_futures(games,logs,date(2026,1,6),trials=250,seed=29)
+    altered=simulate_award_futures(
+        games,logs,date(2026,1,6),trials=250,seed=29,
+        forced_winners={future.game_id: future.away_team},
+    )
+    assert altered.candidates
+    assert baseline != altered
