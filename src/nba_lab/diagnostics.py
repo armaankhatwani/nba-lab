@@ -30,7 +30,13 @@ def chronological_predictions(games: list[Game], model: EloModel | None = None):
             "p_home": p,
             "home_win": y,
         })
-        delta = model.k * (y - p)
+        delta = model.rating_delta(
+            game,
+            ratings[game.home_team],
+            ratings[game.away_team],
+            p,
+            y,
+        )
         ratings[game.home_team] += delta
         ratings[game.away_team] -= delta
     return rows
