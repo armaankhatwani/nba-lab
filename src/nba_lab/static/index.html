@@ -201,6 +201,20 @@
           <div class="panel lineup-side-card" id="lineup-b-card"><div class="lineup-side-head"><span class="eyebrow">LINEUP B</span><strong id="lineup-b-value">—</strong></div><div class="court"><div class="court-key"></div><div id="lineup-b-slots" class="lineup-slots"></div></div><div id="lineup-b-meta" class="lineup-meta">Choose five players.</div></div>
         </div>
         <div class="panel player-pool-panel"><div class="section-head"><div><span class="eyebrow">PLAYER POOL</span><h2>Click a player, then assign a side.</h2></div><div class="pool-controls"><input id="lineup-search" class="table-search" placeholder="Search player / team"><select id="lineup-team-filter"><option value="">All teams</option></select></div></div><div id="lineup-player-pool" class="lineup-player-pool"></div></div>
+        <div class="panel lineup-optimizer-panel">
+          <div class="section-head">
+            <div><span class="eyebrow">ROTATION OPTIMIZER</span><h2>Who should close?</h2><p>Enumerate every five-man combination on one snapshot roster, then rank them with the same RAPM prior + observed-lineup shrinkage model.</p></div>
+            <div class="lineup-optimizer-controls"><label>Team<select id="lineup-opt-team"></select></label><label>Show<select id="lineup-opt-limit"><option>5</option><option selected>8</option><option>12</option></select></label><button class="primary" id="lineup-opt-run">FIND BEST FIVE ↗</button></div>
+          </div>
+          <div class="metric-grid lineup-opt-metrics">
+            <article class="metric"><span>CANDIDATES</span><strong id="lineup-opt-candidates">—</strong><small>players evaluated</small></article>
+            <article class="metric"><span>COMBINATIONS</span><strong id="lineup-opt-combos">—</strong><small>five-man groups</small></article>
+            <article class="metric"><span>TOP SCORE</span><strong id="lineup-opt-best">—</strong><small>blended net / 100</small></article>
+            <article class="metric"><span>TOP EVIDENCE</span><strong id="lineup-opt-evidence">—</strong><small>observed possessions</small></article>
+          </div>
+          <div id="lineup-opt-results" class="lineup-opt-results empty"><span>Choose a team and enumerate its modeled closing groups.</span></div>
+          <p class="note">The robustness band varies only the RAPM prior component using the covariance of the five-player sum. It is a model-sensitivity diagnostic, not a formal confidence interval on lineup performance.</p>
+        </div>
       </section>
       <section class="view" id="view-leverage">
         <div class="leverage-toolbar panel">
@@ -258,8 +272,8 @@
           <div class="panel replay-margin-panel"><div class="section-head"><div><span class="eyebrow">FINAL MARGIN DISTRIBUTION</span><h2>Where does the game finish?</h2></div></div><div id="replay-margin-dist" class="replay-margin-dist"></div></div>
         </div>
         <div class="panel replay-season-panel" id="replay-season-panel" hidden>
-          <div class="section-head"><div><span class="eyebrow">CROSS-LAB / SEASON RIPPLE</span><h2>How does this moment propagate beyond the game?</h2></div><span id="replay-season-note"></span></div>
-          <p class="replay-season-formula">Expected season effect = change in home-win probability × difference between the forced-home-win and forced-away-win season branches.</p>
+          <div class="section-head"><div><span class="eyebrow">CROSS-LAB / SEASON RIPPLE</span><h2>How does this moment propagate beyond the game?</h2></div><div class="replay-season-actions"><span id="replay-season-note"></span><button class="ghost-button" id="replay-to-scenario" hidden>BRANCH OPPOSITE RESULT ↗</button></div></div>
+          <p class="replay-season-formula">Expected season effect = change in home-win probability × difference between the forced-home-win and forced-away-win season branches. The branch button converts the game's opposite final winner into a deterministic Scenario world; it does not pretend the edited score state uniquely determines the final result.</p>
           <div id="replay-season-ripple" class="replay-season-ripple"></div>
         </div>
       </section>
