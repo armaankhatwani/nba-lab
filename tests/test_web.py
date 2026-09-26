@@ -755,7 +755,7 @@ def test_scenario_game_lineups_apply_trade_and_game_specific_absence():
     den = [row for row in impact if row['team'] == 'DEN']
 
     scenario_body = {
-        'as_of': '2026-01-15',
+        'as_of': '2025-12-20',
         'trials': 120,
         'seed': 91,
         'alpha': 1000,
@@ -774,8 +774,13 @@ def test_scenario_game_lineups_apply_trade_and_game_specific_absence():
 
     scenario = client.post('/api/scenario/player-absence', json=scenario_body)
     assert scenario.status_code == 200
+    rows = scenario.json()['affected_games']
+
+    # Scoped impact coverage is intentionally incomplete league-wide.
+    assert any(not row['closing_lineup_available'] for row in rows)
+
     affected = next(
-        row for row in scenario.json()['affected_games']
+        row for row in rows
         if 'BOS' in {row['home_team'], row['away_team']}
         and row['closing_lineup_available']
     )
