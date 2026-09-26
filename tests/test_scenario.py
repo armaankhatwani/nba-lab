@@ -6,6 +6,8 @@ from nba_lab.impact import fit_rapm
 from nba_lab.scenario import (
     PlayerAbsence,
     TradeIntervention,
+    build_scenario_inputs,
+    scenario_roster_for_game,
     build_player_absence_adjustments,
     elo_delta_for_margin,
     simulate_scenario,
@@ -150,3 +152,33 @@ def test_trade_translation_carries_symmetric_impact_uncertainty():
     assert effect.team_a_margin_delta_low_80 <= effect.team_a_margin_delta_per_game <= effect.team_a_margin_delta_high_80
     assert effect.team_b_margin_delta_low_80 <= effect.team_b_margin_delta_per_game <= effect.team_b_margin_delta_high_80
 
+
+
+def test_scenario_roster_applies_trade_and_game_specific_absence():
+    games = synthetic_demo_games()
+    snapshot = synthetic_impact_snapshot()
+    rapm = fit_rapm(list(snapshot.stints), alpha=1000)
+    as_of = date(2026, 1, 15)
+
+    bos = [pid for pid, meta in snapshot.players.items() if meta.team == "BOS"]
+    den = [pid for pid, meta in snapshot.players.items() if meta.team == "DEN"]
+    future_bos = next(
+        game for game in games
+        if game.game_date >= as_of and "BOS" in {game.home_team, game.away_team}
+    )
+    inputs = build_scenario_inputs(
+        games,
+        as_of,
+        snapshot,
+        rapm,
+        [PlayerAbsence(bos[1], games_missed=1, minutes_per_game=30)],
+        trades=[TradeIntervention(bos[0], den[0], minutes_per_game=34)],
+    )
+    roster = scenario_roster_for_game(snapshot, inputs, "BOS", future_bos.game_id)
+
+    assert bos[0] not in roster.player_ids
+    assert den[0] in roster.player_ids
+    assert bos[1] not in roster.player_ids
+    assert den[0] in roster.traded_in
+    assert bos[0] in roster.traded_out
+    assert bos[1] in roster.unavailable
