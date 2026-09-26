@@ -601,3 +601,61 @@ def test_scenario_matchup_flags_when_game_is_already_forced():
     data = r.json()
     assert data['forced_winner'] == game['away_team']
     assert 0 <= data['scenario']['team_a_series_probability'] <= 1
+
+
+def test_model_elo_surface_keeps_selection_and_holdout_separate():
+    r = client.get('/api/model/elo-surface')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['train_games'] > 0
+    assert data['validation_games'] > 0
+    assert len(data['candidates']) == 36
+    assert data['baseline']['k'] == 20
+    assert data['baseline']['home_advantage'] == 65
+    best_train = min(row['train']['brier'] for row in data['candidates'])
+    assert abs(data['selected_on_train']['train']['brier'] - best_train) < 1e-12
+
+
+def test_scenario_lineups_move_traded_players_between_rosters():
+    r = client.post('/api/scenario/lineups?top_k=3', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 31,
+        'alpha': 1000,
+        'trades': [{
+            'player_a_id': '203999',
+            'player_b_id': '1628369',
+            'minutes_per_game': 34
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    teams = {row['team']: row for row in data['teams']}
+    assert {'BOS', 'DEN'} <= set(teams)
+    assert '203999' in teams['BOS']['scenario_roster']
+    assert '1628369' not in teams['BOS']['scenario_roster']
+    assert '1628369' in teams['DEN']['scenario_roster']
+    assert '203999' not in teams['DEN']['scenario_roster']
+
+
+def test_scenario_lineups_remove_absent_player_from_available_fives():
+    r = client.post('/api/scenario/lineups?top_k=5', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 32,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 3,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    bos = next(row for row in data['teams'] if row['team'] == 'BOS')
+    assert '1628369' not in bos['scenario_roster']
+    assert all(
+        '1628369' not in lineup['players']
+        for lineup in bos['scenario_lineups']
+    )

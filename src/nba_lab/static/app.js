@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,replayLastResult=null,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null,pendingScenarioFlipGameId=null;
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],lineupScenarioContext=null,replayGames=[],replayData=null,replayIndex=0,replayLastResult=null,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null,pendingScenarioFlipGameId=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
@@ -37,7 +37,69 @@ function renderMatchup(d){const pa=d.team_a_series_probability,pb=d.team_b_serie
 $('timeline-team').onchange=loadTimeline;
 async function loadTimeline(){const team=$('timeline-team').value||'NYK';const d=await json(`/api/timeline/${team}`);$('tl-record').textContent=`${d.summary.wins}-${d.summary.losses}`;$('tl-current').textContent=d.summary.current_rating.toFixed(0);$('tl-peak').textContent=d.summary.peak_rating.toFixed(0);$('tl-range').textContent=`${d.summary.low_rating.toFixed(0)} → ${d.summary.peak_rating.toFixed(0)}`;$('tl-title').textContent=`${d.team.name} · Elo trajectory`;drawTimeline(d.points);$('timeline-games').innerHTML=d.points.slice(-16).reverse().map(p=>`<div class="game-chip ${p.win?'win':'loss'}"><span>${p.date} · ${p.home?'vs':'@'} ${p.opponent}</span><strong>${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin}</strong><span>${p.wins}-${p.losses} · Elo ${p.rating.toFixed(0)}</span></div>`).join('')}
 function drawTimeline(points){const el=$('timeline-chart');if(!points.length){el.innerHTML='';return}const W=900,H=250,pad=34;const vals=points.map(p=>p.rating);const min=Math.min(...vals)-15,max=Math.max(...vals)+15;const x=i=>pad+(W-2*pad)*(i/Math.max(1,points.length-1));const y=v=>H-pad-(H-2*pad)*((v-min)/(max-min));const path=points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.rating).toFixed(1)}`).join(' ');const grids=[min,(min+max)/2,max];el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grids.map(v=>`<line class="grid" x1="${pad}" y1="${y(v)}" x2="${W-pad}" y2="${y(v)}"/><text x="2" y="${y(v)+3}">${v.toFixed(0)}</text>`).join('')}<path class="line" d="${path}"/>${points.map((p,i)=>`<circle class="point ${p.win?'win':'loss'}" cx="${x(i)}" cy="${y(p.rating)}" r="4"><title>${p.date} · ${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin} vs ${p.opponent} · Elo ${p.rating}</title></circle>`).join('')}</svg>`}
-async function loadDiagnostics(){if(diagnosticsLoaded)return;const d=await json('/api/diagnostics');diagnosticsLoaded=true;$('md-brier').textContent=d.metrics.brier.toFixed(3);$('md-logloss').textContent=d.metrics.log_loss.toFixed(3);$('md-accuracy').textContent=pct(d.metrics.accuracy);$('md-games').textContent=d.metrics.games.toLocaleString();$('model-name').textContent=d.model.name;$('model-base').textContent=d.model.base;$('model-k').textContent=d.model.k;$('model-home').textContent=`${d.model.home_advantage} Elo`;$('promotion-rule').textContent=d.model.promotion_rule;drawCalibration(d.calibration)}
+async function loadDiagnostics(){
+  if(diagnosticsLoaded)return;
+  const [d,surface]=await Promise.all([json('/api/diagnostics'),json('/api/model/elo-surface')]);
+  diagnosticsLoaded=true;
+  $('md-brier').textContent=d.metrics.brier.toFixed(3);
+  $('md-logloss').textContent=d.metrics.log_loss.toFixed(3);
+  $('md-accuracy').textContent=pct(d.metrics.accuracy);
+  $('md-games').textContent=d.metrics.games.toLocaleString();
+  $('model-name').textContent=d.model.name;
+  $('model-base').textContent=d.model.base;
+  $('model-k').textContent=d.model.k;
+  $('model-home').textContent=`${d.model.home_advantage} Elo`;
+  $('promotion-rule').textContent=d.model.promotion_rule;
+  drawCalibration(d.calibration);
+  drawEloSurface(surface);
+}
+
+function drawEloSurface(d){
+  const ks=[...new Set(d.candidates.map(function(row){return Number(row.k)}))].sort(function(a,b){return a-b});
+  const homes=[...new Set(d.candidates.map(function(row){return Number(row.home_advantage)}))].sort(function(a,b){return a-b});
+  const by=new Map(d.candidates.map(function(row){return [row.k+'|'+row.home_advantage,row]}));
+  const values=d.candidates.map(function(row){return row.validation.brier});
+  const min=Math.min.apply(null,values),max=Math.max.apply(null,values),span=Math.max(1e-9,max-min);
+  const selected=d.selected_on_train,baseline=d.baseline,delta=selected.validation.brier-baseline.validation.brier;
+
+  $('elo-surface-status').textContent=d.train_games+' train · '+d.validation_games+' holdout · split '+d.split_date;
+  $('elo-split').textContent=d.train_games+' → '+d.validation_games;
+  $('elo-base-holdout').textContent=baseline.validation.brier.toFixed(3);
+  $('elo-selected').textContent='K'+selected.k.toFixed(0)+' / H'+selected.home_advantage.toFixed(0);
+  $('elo-holdout-delta').textContent=(delta>=0?'+':'')+delta.toFixed(4);
+  $('elo-holdout-delta').className=delta<0?'positive':delta>0?'negative':'';
+
+  const grid=$('elo-surface-grid');
+  grid.style.gridTemplateColumns='70px repeat('+homes.length+',minmax(78px,1fr))';
+  const cells=['<div class="elo-grid-cell axis">K ↓ / HOME →</div>'];
+  homes.forEach(function(home){cells.push('<div class="elo-grid-cell axis">'+home.toFixed(0)+'</div>')});
+  ks.forEach(function(k){
+    cells.push('<div class="elo-grid-cell axis">K '+k.toFixed(0)+'</div>');
+    homes.forEach(function(home){
+      const row=by.get(k+'|'+home);
+      const quality=1-(row.validation.brier-min)/span;
+      const alpha=(.05+.34*quality).toFixed(3);
+      const baselineCell=k===Number(baseline.k)&&home===Number(baseline.home_advantage);
+      const selectedCell=k===Number(selected.k)&&home===Number(selected.home_advantage);
+      cells.push('<div class="elo-grid-cell value '+(baselineCell?'baseline ':'')+(selectedCell?'selected':'')+'" style="background:rgba(129,214,190,'+alpha+')">'
+        +'<strong>'+row.validation.brier.toFixed(3)+'</strong>'
+        +'<span>train '+row.train.brier.toFixed(3)+'</span>'
+        +'<title>K '+k+' · home '+home+' · train Brier '+row.train.brier.toFixed(4)+' · holdout Brier '+row.validation.brier.toFixed(4)+'</title>'
+        +'</div>');
+    });
+  });
+  grid.innerHTML=cells.join('');
+
+  const verdict=$('elo-surface-verdict');
+  if(delta<0){
+    verdict.innerHTML='<strong>Train-selected candidate improves this holdout by <span class="positive">'+Math.abs(delta).toFixed(4)+' Brier</span>.</strong> That earns a follow-up experiment, not automatic promotion.';
+  }else if(delta>0){
+    verdict.innerHTML='<strong>The deployed baseline beats the train-selected candidate on this holdout by <span class="positive">'+Math.abs(delta).toFixed(4)+' Brier</span>.</strong> The frozen baseline survives this parameter search.';
+  }else{
+    verdict.innerHTML='<strong>The train-selected candidate ties the deployed baseline on this holdout.</strong> There is no evidence here to change the deployed parameters.';
+  }
+}
+
 function drawCalibration(points){const el=$('calibration-chart'),W=600,H=250,pad=34;const x=v=>pad+(W-2*pad)*v,y=v=>H-pad-(H-2*pad)*v;const path=points.map((p,i)=>`${i?'L':'M'}${x(p.mean_prediction)},${y(p.actual_rate)}`).join(' ');el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="grid" x1="${pad}" y1="${y(.5)}" x2="${W-pad}" y2="${y(.5)}"/><line class="grid" x1="${x(.5)}" y1="${pad}" x2="${x(.5)}" y2="${H-pad}"/><line class="ideal" x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}"/><path class="cal-line" d="${path}"/>${points.map(p=>`<circle class="point win" cx="${x(p.mean_prediction)}" cy="${y(p.actual_rate)}" r="${Math.max(4,Math.min(9,Math.sqrt(p.count)))}"><title>${(p.mean_prediction*100).toFixed(1)}% predicted · ${(p.actual_rate*100).toFixed(1)}% observed · n=${p.count}</title></circle>`).join('')}<text x="${pad}" y="${H-6}">0%</text><text x="${W-pad-18}" y="${H-6}">100%</text><text x="4" y="${pad+3}">100%</text><text x="4" y="${H-pad+3}">0%</text></svg>`}
 
 
@@ -229,6 +291,18 @@ $('replay-to-scenario').onclick=function(){
   openView('scenario');
 };
 
+
+function clearLineupScenarioContext(){
+  lineupScenarioContext=null;
+  $('lineup-context').hidden=true;
+  $('lineup-context').innerHTML='';
+}
+function setLineupScenarioContext(team,asOf){
+  lineupScenarioContext={team:team,as_of:asOf};
+  $('lineup-context').hidden=false;
+  $('lineup-context').innerHTML='<strong>SCENARIO ROSTER · '+team+'</strong><span>Loaded from Scenario Lab as of '+asOf+'. Team labels on Lineup A reflect the altered roster, not the original snapshot metadata.</span>';
+}
+
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
   const params=new URLSearchParams({alpha:String(alpha)});
@@ -265,7 +339,7 @@ function renderLineupSlots(){
   document.querySelectorAll('[data-remove-player]').forEach(button=>button.onclick=()=>{
     const arr=button.dataset.removeSide==='a'?lineupA:lineupB;
     const idx=arr.indexOf(button.dataset.removePlayer);if(idx>=0)arr.splice(idx,1);
-    resetLineupResult();renderLineupSlots();renderLineupPool();
+    clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool();
   });
 }
 function renderLineupPool(){
@@ -284,7 +358,7 @@ function addLineupPlayer(side,pid){
   if(lineupA.includes(pid)||lineupB.includes(pid))return;
   const arr=side==='a'?lineupA:lineupB;
   if(arr.length>=5)return;
-  arr.push(pid);resetLineupResult();renderLineupSlots();renderLineupPool();
+  arr.push(pid);clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool();
 }
 function resetLineupResult(){
   $('lineup-a-value').textContent='—';$('lineup-b-value').textContent='—';$('lineup-margin').textContent='—';
@@ -294,11 +368,11 @@ function resetLineupResult(){
 }
 $('lineup-search').oninput=renderLineupPool;
 $('lineup-team-filter').onchange=renderLineupPool;
-$('lineup-alpha').onchange=async()=>{await loadLineup();resetLineupResult();resetLineupOptimizer()};
-$('lineup-date').onchange=async()=>{await loadLineup();resetLineupResult();resetLineupOptimizer()};
-$('lineup-latest').onclick=async()=>{$('lineup-date').value='';await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-alpha').onchange=async()=>{clearLineupScenarioContext();await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-date').onchange=async()=>{clearLineupScenarioContext();await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-latest').onclick=async()=>{$('lineup-date').value='';clearLineupScenarioContext();await loadLineup();resetLineupResult();resetLineupOptimizer()};
 $('lineup-prior').onchange=()=>{resetLineupResult();resetLineupOptimizer()};
-$('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;resetLineupResult();renderLineupSlots();renderLineupPool()};
+$('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool()};
 $('lineup-run').onclick=async()=>{
   if(lineupA.length!==5||lineupB.length!==5){$('lineup-margin-note').textContent='both sides need five unique players';return}
   const button=$('lineup-run');button.disabled=true;
@@ -471,7 +545,8 @@ function scenarioShareSpec(){
     award_trials:Number($('scenario-award-trials').value||750),
     sensitivity_trials:Number($('scenario-sensitivity-trials').value||750),
     leverage_trials:Number($('scenario-leverage-trials').value||500),
-    leverage_limit:Number($('scenario-leverage-limit').value||10)
+    leverage_limit:Number($('scenario-leverage-limit').value||10),
+    lineup_limit:Number($('scenario-lineup-limit').value||4)
   };
 }
 function setScenarioShareStatus(message,isError){
@@ -498,6 +573,8 @@ function clearScenarioResults(){
   $('scenario-sensitivity-rows').innerHTML='<span>Run a scenario, then compare lower-signal, point, and upper-signal player-impact worlds.</span>';
   $('scenario-leverage-rows').classList.add('empty');
   $('scenario-leverage-rows').innerHTML='<span>Run a scenario, then re-rank upcoming games inside that alternate world.</span>';
+  $('scenario-lineup-results').classList.add('empty');
+  $('scenario-lineup-results').innerHTML='<span>Trade or remove a player, then recompute the affected teams\' best modeled five-man groups.</span>';
   $('scenario-award-future-bars').classList.add('empty');
   $('scenario-award-future-bars').innerHTML='<span>Run an alternate world, then propagate it through the remaining MVP simulation.</span>';
 }
@@ -511,6 +588,7 @@ async function applyScenarioShareSpec(spec){
   if(spec.sensitivity_trials)$('scenario-sensitivity-trials').value=String(spec.sensitivity_trials);
   if(spec.leverage_trials)$('scenario-leverage-trials').value=String(spec.leverage_trials);
   if(spec.leverage_limit)$('scenario-leverage-limit').value=String(spec.leverage_limit);
+  if(spec.lineup_limit)$('scenario-lineup-limit').value=String(spec.lineup_limit);
   await loadScenarioPlayers();
   await loadScenarioHistory();
   await loadScenarioFutureGames();
@@ -597,6 +675,7 @@ $('scenario-reset').onclick=async function(){
   $('scenario-sensitivity-trials').value='750';
   $('scenario-leverage-trials').value='500';
   $('scenario-leverage-limit').value='10';
+  $('scenario-lineup-limit').value='4';
   await loadScenarioPlayers();
   await loadScenarioHistory();
   await loadScenarioFutureGames();
@@ -910,6 +989,64 @@ function renderScenarioSensitivity(d){
       +'<div class="sensitivity-metric"><span>TITLE ODDS</span><div class="sensitivity-triplet"><strong class="low">'+pct(low[team].championship_probability)+'</strong><i>→</i><strong class="point">'+pct(point[team].championship_probability)+'</strong><i>→</i><strong class="high">'+pct(high[team].championship_probability)+'</strong></div>'+(titleRange?'<small>Δ range '+(titleRange[0]>=0?'+':'')+(100*titleRange[0]).toFixed(2)+' to '+(titleRange[1]>=0?'+':'')+(100*titleRange[1]).toFixed(2)+' pts</small>':'')+'</div>'
       +'</div>';
   }).join('');
+}
+
+
+$('scenario-lineups-run').onclick=async function(){
+  const button=$('scenario-lineups-run'),target=$('scenario-lineup-results');
+  button.disabled=true;
+  target.classList.add('empty');
+  target.innerHTML='<span>Rebuilding affected rosters and enumerating closing groups…</span>';
+  try{
+    const body=buildScenarioRequest();validateScenarioRequest(body);
+    if(!body.absences.length&&!body.trades.length)throw Error('This scenario does not change player availability or roster membership.');
+    const topK=Number($('scenario-lineup-limit').value);
+    const d=await json('/api/scenario/lineups?top_k='+topK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    renderScenarioLineups(d);
+  }catch(e){
+    target.classList.add('empty');
+    target.innerHTML='<span>'+e.message+'</span>';
+  }finally{button.disabled=false}
+};
+function scenarioLineupFive(row,kind,team,asOf,alpha){
+  const names=row.player_meta.map(function(p){return p.player_name}).join(' · ');
+  const evidence=row.observed_possessions>0
+    ? Math.round(row.observed_possessions)+' observed poss · '+Math.round(100*row.observed_weight)+'% empirical'
+    : 'unseen group · RAPM prior only';
+  const load=kind==='scenario'
+    ? '<button data-scenario-lineup-load="'+row.players.join(',')+'" data-lineup-team="'+team+'" data-lineup-asof="'+asOf+'" data-lineup-alpha="'+alpha+'">LOAD A ↗</button>'
+    : '';
+  return '<div class="scenario-lineup-five"><div><strong>'+names+'</strong><small>'+evidence+' · band '+row.blended_lower_80.toFixed(1)+' to '+row.blended_upper_80.toFixed(1)+'</small></div><strong>'+(row.blended_net_rating>=0?'+':'')+row.blended_net_rating.toFixed(1)+'</strong>'+load+'</div>';
+}
+function renderScenarioLineups(d){
+  const target=$('scenario-lineup-results');
+  if(!d.teams?.length){target.classList.add('empty');target.innerHTML='<span>No affected rosters could be optimized.</span>';return}
+  target.classList.remove('empty');
+  target.innerHTML=d.teams.map(function(team){
+    const delta=team.top_score_delta;
+    const deltaText=delta==null?'—':((delta>=0?'+':'')+delta.toFixed(1));
+    const baseline=team.baseline_lineups.slice(0,Math.min(2,team.baseline_lineups.length)).map(function(row){return scenarioLineupFive(row,'baseline',team.team,d.as_of,d.alpha)}).join('');
+    const scenario=team.scenario_lineups.slice(0,Math.min(3,team.scenario_lineups.length)).map(function(row){return scenarioLineupFive(row,'scenario',team.team,d.as_of,d.alpha)}).join('');
+    return '<div class="scenario-lineup-team">'
+      +'<div class="scenario-lineup-team-head"><strong>'+team.team+' closing groups</strong><span>'+team.baseline_candidate_players+' → '+team.scenario_candidate_players+' available players · top score <b class="scenario-lineup-delta '+((delta||0)>=0?'positive':'negative')+'">'+deltaText+'</b></span></div>'
+      +'<div class="scenario-lineup-worlds"><div class="scenario-lineup-world"><span>BASELINE ROSTER</span>'+baseline+'</div><div class="scenario-lineup-world"><span>SCENARIO ROSTER</span>'+scenario+'</div></div>'
+      +'</div>';
+  }).join('');
+  document.querySelectorAll('[data-scenario-lineup-load]').forEach(function(button){
+    button.onclick=async function(){
+      $('lineup-date').value=button.dataset.lineupAsof||'';
+      $('lineup-alpha').value=button.dataset.lineupAlpha||'1000';
+      openView('lineup');
+      await loadLineup();
+      const requested=button.dataset.scenarioLineupLoad.split(',');
+      const available=new Set(lineupPool.map(function(p){return p.player_id}));
+      lineupA=requested.filter(function(pid){return available.has(pid)});
+      lineupB=lineupB.filter(function(pid){return !lineupA.includes(pid)});
+      setLineupScenarioContext(button.dataset.lineupTeam,button.dataset.lineupAsof);
+      resetLineupResult();renderLineupSlots();renderLineupPool();
+      $('lineup-margin-note').textContent='Scenario closing group loaded into Lineup A';
+    };
+  });
 }
 
 $('scenario-awards-run').onclick=async function(){

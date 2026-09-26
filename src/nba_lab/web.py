@@ -21,6 +21,7 @@ from .demo_awards import synthetic_player_games
 from .diagnostics import calibration_curve
 from .elo import EloModel
 from .matchup import simulate_matchup
+from .model_selection import evaluate_elo_surface
 from .impact import fit_rapm
 from .impact_source import load_impact_snapshot, snapshot_as_of
 from .lineup import compare_lineups, optimize_lineups
@@ -1032,6 +1033,134 @@ def scenario_sensitivity(request: ScenarioRequest, sensitivity_trials: int = 750
     }
 
 
+@app.post("/api/scenario/lineups")
+def scenario_lineups(
+    request: ScenarioRequest,
+    top_k: int = 4,
+    prior_possessions: float = 300.0,
+):
+    if not request.absences and not request.trades:
+        raise HTTPException(
+            422,
+            "scenario lineup comparison requires a player absence or trade",
+        )
+    top_k = max(1, min(top_k, 10))
+    if prior_possessions <= 0 or prior_possessions > 5000:
+        raise HTTPException(422, "prior_possessions must be in (0, 5000]")
+    try:
+        snapshot = _impact_snapshot_as_of(request.as_of)
+        rapm = _impact_result(float(request.alpha), request.as_of)
+        inputs = build_scenario_inputs(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            rapm,
+            _scenario_absences(request),
+            flipped_game_ids=request.flipped_game_ids,
+            future_results=_scenario_future_results(request),
+            trades=_scenario_trades(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    available = {row.player_id for row in rapm.players}
+    baseline_team = {
+        player_id: meta.team
+        for player_id, meta in snapshot.players.items()
+        if player_id in available
+    }
+    scenario_team = dict(baseline_team)
+    affected_teams: set[str] = set()
+
+    for trade in inputs.trades:
+        scenario_team[trade.player_a_id] = trade.team_b
+        scenario_team[trade.player_b_id] = trade.team_a
+        affected_teams.update((trade.team_a, trade.team_b))
+
+    absent_ids = {row.player_id for row in inputs.player_absences}
+    for absence in inputs.player_absences:
+        affected_teams.add(absence.team)
+
+    def serialize_lineup(row, team_map):
+        return {
+            **asdict(row),
+            "player_meta": [
+                {
+                    **asdict(snapshot.players[player_id]),
+                    "scenario_team": team_map[player_id],
+                }
+                for player_id in row.players
+            ],
+        }
+
+    rows = []
+    for team in sorted(affected_teams):
+        base_candidates = tuple(
+            player_id
+            for player_id, player_team in baseline_team.items()
+            if player_team == team
+        )
+        scenario_candidates = tuple(
+            player_id
+            for player_id, player_team in scenario_team.items()
+            if player_team == team and player_id not in absent_ids
+        )
+        try:
+            baseline_rows = optimize_lineups(
+                snapshot,
+                rapm,
+                base_candidates,
+                prior_possessions=prior_possessions,
+                top_k=top_k,
+            )
+            scenario_rows = optimize_lineups(
+                snapshot,
+                rapm,
+                scenario_candidates,
+                prior_possessions=prior_possessions,
+                top_k=top_k,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, f"{team}: {exc}") from exc
+
+        base_top = baseline_rows[0] if baseline_rows else None
+        scenario_top = scenario_rows[0] if scenario_rows else None
+        rows.append({
+            "team": team,
+            "baseline_candidate_players": len(base_candidates),
+            "scenario_candidate_players": len(scenario_candidates),
+            "baseline_roster": list(base_candidates),
+            "scenario_roster": list(scenario_candidates),
+            "baseline_top_score": (
+                base_top.blended_net_rating if base_top else None
+            ),
+            "scenario_top_score": (
+                scenario_top.blended_net_rating if scenario_top else None
+            ),
+            "top_score_delta": (
+                scenario_top.blended_net_rating - base_top.blended_net_rating
+                if base_top is not None and scenario_top is not None
+                else None
+            ),
+            "baseline_lineups": [
+                serialize_lineup(row, baseline_team)
+                for row in baseline_rows
+            ],
+            "scenario_lineups": [
+                serialize_lineup(row, scenario_team)
+                for row in scenario_rows
+            ],
+        })
+
+    return {
+        "as_of": request.as_of.isoformat(),
+        "alpha": request.alpha,
+        "prior_possessions": prior_possessions,
+        "teams": rows,
+        "warning": "Post-trade lineups containing newly acquired players are generally unseen combinations and therefore lean on the additive RAPM prior. The optimizer does not model positional fit, role changes, fatigue, or minute feasibility.",
+    }
+
+
 @app.post("/api/scenario/awards")
 def scenario_awards(request: ScenarioRequest, award_trials: int = 750):
     if not _scenario_has_intervention(request):
@@ -1209,6 +1338,38 @@ def timeline(team: str):
             "largest_win": max((point.margin for point in points), default=0),
             "largest_loss": min((point.margin for point in points), default=0),
         },
+    }
+
+
+@app.get("/api/model/elo-surface")
+def model_elo_surface():
+    result = evaluate_elo_surface(GAMES)
+    return {
+        "train_games": result.train_games,
+        "validation_games": result.validation_games,
+        "split_date": result.split_date,
+        "selected_on_train": {
+            "k": result.selected_on_train.k,
+            "home_advantage": result.selected_on_train.home_advantage,
+            "train": asdict(result.selected_on_train.train),
+            "validation": asdict(result.selected_on_train.validation),
+        },
+        "baseline": {
+            "k": result.baseline.k,
+            "home_advantage": result.baseline.home_advantage,
+            "train": asdict(result.baseline.train),
+            "validation": asdict(result.baseline.validation),
+        },
+        "candidates": [
+            {
+                "k": row.k,
+                "home_advantage": row.home_advantage,
+                "train": asdict(row.train),
+                "validation": asdict(row.validation),
+            }
+            for row in result.candidates
+        ],
+        "warning": "The grid is selected only on the earlier chronological slice and evaluated on the later holdout. A single holdout improvement is evidence for further testing, not automatic model promotion.",
     }
 
 
