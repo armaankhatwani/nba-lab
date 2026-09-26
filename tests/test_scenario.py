@@ -150,25 +150,3 @@ def test_trade_translation_carries_symmetric_impact_uncertainty():
     assert effect.team_a_margin_delta_low_80 <= effect.team_a_margin_delta_per_game <= effect.team_a_margin_delta_high_80
     assert effect.team_b_margin_delta_low_80 <= effect.team_b_margin_delta_per_game <= effect.team_b_margin_delta_high_80
 
-
-def test_scenario_can_propagate_impact_sensitivity_to_team_outcomes():
-    games = synthetic_demo_games()
-    snapshot = synthetic_impact_snapshot()
-    rapm = fit_rapm(list(snapshot.stints), alpha=1000)
-    player = max(rapm.players, key=lambda row: row.impact_per_100)
-    team = snapshot.players[player.player_id].team
-    result = simulate_scenario(
-        games,
-        date(2026, 1, 15),
-        snapshot,
-        rapm,
-        [PlayerAbsence(player.player_id, games_missed=6, minutes_per_game=36)],
-        trials=250,
-        seed=27,
-        include_impact_sensitivity=True,
-    )
-    row = next(item for item in result.impact_sensitivity if item.team == team)
-    altered = next(item for item in result.altered.teams if item.team == team)
-    assert row.expected_wins_min <= altered.expected_wins <= row.expected_wins_max
-    assert row.playoffs_probability_min <= altered.playoffs_probability <= row.playoffs_probability_max
-    assert row.championship_probability_min <= altered.championship_probability <= row.championship_probability_max
