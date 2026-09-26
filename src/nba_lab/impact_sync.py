@@ -63,6 +63,7 @@ def build_impact_snapshot(
     pbp_dir: str | Path,
     source: str = "file",
     max_games: int | None = None,
+    teams: set[str] | None = None,
 ):
     """Build NBA Lab's normalized impact snapshot using pbpstats."""
     try:
@@ -71,6 +72,12 @@ def build_impact_snapshot(
         raise RuntimeError("Install impact extras: pip install -e '.[impact]'") from exc
 
     games = [g for g in load_snapshot(schedule_path) if g.is_final]
+    team_filter = {team.upper() for team in (teams or set())}
+    if team_filter:
+        games = [
+            game for game in games
+            if {game.home_team, game.away_team} & team_filter
+        ]
     if max_games is not None:
         games = games[:max_games]
 
@@ -126,7 +133,11 @@ def build_impact_snapshot(
         "source": "pbpstats_possessions",
         "players": sorted(players.values(), key=lambda row: (row["team"], row["player_name"])),
         "stints": stints,
-        "qa": dict(qa),
+        "qa": {
+            **dict(qa),
+            "team_filter": sorted(team_filter),
+            "games_selected": len(games),
+        },
     }
 
     output = Path(output_path)
