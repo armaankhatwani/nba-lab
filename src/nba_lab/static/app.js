@@ -198,8 +198,14 @@ function renderReplaySeasonRipple(ripple){
 
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
-  const d=await json(`/api/lineup/players?alpha=${alpha}`);
+  const params=new URLSearchParams({alpha:String(alpha)});
+  if($('lineup-date').value)params.set('as_of',$('lineup-date').value);
+  const d=await json('/api/lineup/players?'+params);
   lineupPool=d.players||[];
+  const available=new Set(lineupPool.map(function(p){return p.player_id}));
+  lineupA=lineupA.filter(function(pid){return available.has(pid)});
+  lineupB=lineupB.filter(function(pid){return available.has(pid)});
+  $('lineup-source').textContent=d.as_of?('AS OF '+d.as_of):'FULL SNAPSHOT';
   const teams=[...new Set(lineupPool.map(p=>p.team))].sort();
   if($('lineup-team-filter').options.length<=1){
     teams.forEach(team=>{const o=document.createElement('option');o.value=team;o.textContent=team;$('lineup-team-filter').append(o)});
@@ -250,6 +256,8 @@ function resetLineupResult(){
 $('lineup-search').oninput=renderLineupPool;
 $('lineup-team-filter').onchange=renderLineupPool;
 $('lineup-alpha').onchange=async()=>{await loadLineup();resetLineupResult()};
+$('lineup-date').onchange=async()=>{await loadLineup();resetLineupResult()};
+$('lineup-latest').onclick=async()=>{$('lineup-date').value='';await loadLineup();resetLineupResult()};
 $('lineup-prior').onchange=resetLineupResult;
 $('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;resetLineupResult();renderLineupSlots();renderLineupPool()};
 $('lineup-run').onclick=async()=>{
@@ -257,14 +265,15 @@ $('lineup-run').onclick=async()=>{
   const button=$('lineup-run');button.disabled=true;
   try{
     const d=await json('/api/lineup/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      lineup_a:lineupA,lineup_b:lineupB,alpha:Number($('lineup-alpha').value),prior_possessions:Number($('lineup-prior').value)
+      lineup_a:lineupA,lineup_b:lineupB,alpha:Number($('lineup-alpha').value),prior_possessions:Number($('lineup-prior').value),
+      as_of:$('lineup-date').value||null
     })});
     const a=d.lineup_a,b=d.lineup_b,m=d.neutral_margin_per_100;
     $('lineup-a-value').textContent=`${a.blended_net_rating>=0?'+':''}${a.blended_net_rating.toFixed(1)}`;
     $('lineup-b-value').textContent=`${b.blended_net_rating>=0?'+':''}${b.blended_net_rating.toFixed(1)}`;
     $('lineup-margin').textContent=`${m>=0?'+':''}${m.toFixed(1)}`;
     const winner=m>=0?'Lineup A':'Lineup B';
-    $('lineup-margin-note').textContent=`${winner} model edge per 100 possessions`;
+    $('lineup-margin-note').textContent=`${winner} model edge per 100 possessions${d.as_of?' · as of '+d.as_of:''}`;
     const meta=lineup=>lineup.observed_possessions>0
       ? `<span class="lineup-seen">OBSERVED UNIT</span> · ${Math.round(lineup.observed_possessions)} poss · raw ${lineup.observed_net_rating.toFixed(1)} · ${Math.round(100*lineup.observed_weight)}% empirical weight`
       : `<span class="lineup-unseen">UNSEEN UNIT</span> · additive RAPM prior only`;
