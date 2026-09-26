@@ -39,7 +39,7 @@ async function loadTimeline(){const team=$('timeline-team').value||'NYK';const d
 function drawTimeline(points){const el=$('timeline-chart');if(!points.length){el.innerHTML='';return}const W=900,H=250,pad=34;const vals=points.map(p=>p.rating);const min=Math.min(...vals)-15,max=Math.max(...vals)+15;const x=i=>pad+(W-2*pad)*(i/Math.max(1,points.length-1));const y=v=>H-pad-(H-2*pad)*((v-min)/(max-min));const path=points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.rating).toFixed(1)}`).join(' ');const grids=[min,(min+max)/2,max];el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grids.map(v=>`<line class="grid" x1="${pad}" y1="${y(v)}" x2="${W-pad}" y2="${y(v)}"/><text x="2" y="${y(v)+3}">${v.toFixed(0)}</text>`).join('')}<path class="line" d="${path}"/>${points.map((p,i)=>`<circle class="point ${p.win?'win':'loss'}" cx="${x(i)}" cy="${y(p.rating)}" r="4"><title>${p.date} · ${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin} vs ${p.opponent} · Elo ${p.rating}</title></circle>`).join('')}</svg>`}
 async function loadDiagnostics(){
   if(diagnosticsLoaded)return;
-  const [d,surface]=await Promise.all([json('/api/diagnostics'),json('/api/model/elo-surface')]);
+  const [d,surface,families]=await Promise.all([json('/api/diagnostics'),json('/api/model/elo-surface'),json('/api/model/families')]);
   diagnosticsLoaded=true;
   $('md-brier').textContent=d.metrics.brier.toFixed(3);
   $('md-logloss').textContent=d.metrics.log_loss.toFixed(3);
@@ -52,6 +52,46 @@ async function loadDiagnostics(){
   $('promotion-rule').textContent=d.model.promotion_rule;
   drawCalibration(d.calibration);
   drawEloSurface(surface);
+  drawModelFamilies(families);
+}
+
+
+function drawModelFamilies(d){
+  const baseline=d.baseline,plain=d.tuned_plain,score=d.score_aware,paired=d.score_aware_vs_baseline;
+  $('family-status').textContent=d.train_games+' train · '+d.validation_games+' holdout · split '+d.split_date;
+  $('family-base-brier').textContent=baseline.validation.brier.toFixed(3);
+  $('family-base-params').textContent='K'+baseline.k.toFixed(0)+' · H'+baseline.home_advantage.toFixed(0);
+  $('family-plain-brier').textContent=plain.validation.brier.toFixed(3);
+  $('family-plain-params').textContent='K'+plain.k.toFixed(0)+' · H'+plain.home_advantage.toFixed(0);
+  $('family-score-brier').textContent=score.validation.brier.toFixed(3);
+  $('family-score-params').textContent='K'+score.k.toFixed(0)+' · H'+score.home_advantage.toFixed(0)+' · margin × '+score.margin_weight.toFixed(2);
+
+  $('family-delta').textContent=(paired.mean_delta>=0?'+':'')+paired.mean_delta.toFixed(4);
+  $('family-delta').className=paired.mean_delta<0?'positive':paired.mean_delta>0?'negative':'';
+  $('family-ci').textContent=(paired.lower_95>=0?'+':'')+paired.lower_95.toFixed(4)+' → '+(paired.upper_95>=0?'+':'')+paired.upper_95.toFixed(4);
+
+  const maxAbs=Math.max(Math.abs(paired.lower_95),Math.abs(paired.upper_95),.0001);
+  const left=50+50*paired.lower_95/maxAbs;
+  const right=50+50*paired.upper_95/maxAbs;
+  $('family-band').style.left=Math.min(left,right)+'%';
+  $('family-band').style.width=Math.max(2,Math.abs(right-left))+'%';
+
+  const verdict=$('family-verdict');
+  verdict.className='model-family-verdict ';
+  if(paired.upper_95<0){
+    verdict.classList.add('promising');
+    verdict.innerHTML='<strong>FOLLOW-UP EXPERIMENT.</strong> Score-aware Elo improves this holdout and the paired diagnostic band stays below zero. That is evidence to repeat the result on another season—not enough to replace the deployed model yet.';
+  }else if(paired.lower_95>0){
+    verdict.classList.add('reject');
+    verdict.innerHTML='<strong>DO NOT PROMOTE.</strong> Score-aware Elo is worse across this paired holdout diagnostic. Extra complexity has not earned deployment.';
+  }else{
+    verdict.classList.add('inconclusive');
+    const direction=paired.mean_delta<0?'leans better':'leans worse';
+    verdict.innerHTML='<strong>INCONCLUSIVE.</strong> Score-aware Elo '+direction+' on the point estimate, but the paired diagnostic band crosses zero. Keep the plain Elo baseline deployed.';
+  }
+
+  const plainDelta=plain.validation.brier-baseline.validation.brier;
+  verdict.innerHTML+='<br><span>Tuned plain Elo holdout Δ Brier: '+(plainDelta>=0?'+':'')+plainDelta.toFixed(4)+'. Score-aware train selection: margin weight '+score.margin_weight.toFixed(2)+'.</span>';
 }
 
 function drawEloSurface(d){
