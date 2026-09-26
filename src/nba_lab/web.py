@@ -30,7 +30,7 @@ from .demo_impact import synthetic_impact_snapshot
 from .demo_replay import synthetic_replay_snapshots
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
-from .scenario import PlayerAbsence, simulate_scenario
+from .scenario import PlayerAbsence, TradeIntervention, simulate_scenario
 from .teams import TEAMS
 from .timeline import team_timeline
 
@@ -161,13 +161,20 @@ class PlayerAbsenceRequest(BaseModel):
     replacement_impact_per_100: float = Field(default=0.0, ge=-10, le=10)
 
 
+class TradeRequest(BaseModel):
+    player_a_id: str
+    player_b_id: str
+    minutes_per_game: float = Field(default=34.0, gt=0, le=48)
+
+
 class PlayerAbsenceScenarioRequest(BaseModel):
     as_of: date
     trials: int = Field(default=5000, ge=100, le=25000)
     seed: int = 2026
     alpha: float = Field(default=1000.0, gt=0, le=10000)
-    absences: list[PlayerAbsenceRequest]
-    flipped_game_ids: list[str] = []
+    absences: list[PlayerAbsenceRequest] = Field(default_factory=list)
+    flipped_game_ids: list[str] = Field(default_factory=list)
+    trades: list[TradeRequest] = Field(default_factory=list)
 
 
 def _serialize(result):
@@ -596,8 +603,8 @@ def replay_simulate(request: ReplaySimRequest):
 
 @app.post("/api/scenario/player-absence")
 def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
-    if not request.absences:
-        raise HTTPException(422, "at least one player absence is required")
+    if not request.absences and not request.flipped_game_ids and not request.trades:
+        raise HTTPException(422, "scenario requires at least one intervention")
     try:
         result = simulate_scenario(
             GAMES,
@@ -614,6 +621,14 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
                 for row in request.absences
             ],
             flipped_game_ids=request.flipped_game_ids,
+            trades=[
+                TradeIntervention(
+                    player_a_id=row.player_a_id,
+                    player_b_id=row.player_b_id,
+                    minutes_per_game=row.minutes_per_game,
+                )
+                for row in request.trades
+            ],
             trials=request.trials,
             seed=request.seed,
         )
@@ -647,6 +662,7 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
         "deltas": [asdict(row) for row in result.deltas],
         "player_absences": [asdict(row) for row in result.player_absences],
         "historical_flips": [asdict(row) for row in result.historical_flips],
+        "trades": [asdict(row) for row in result.trades],
         "award_ripple": award_ripple[:8],
         "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games. Historical flips rebuild point-in-time team and award context.",
     }
