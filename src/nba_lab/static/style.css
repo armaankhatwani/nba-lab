@@ -32,3 +32,5 @@
 .impact-controls input[type=date]{display:block;margin-top:6px;background:#0b1013;border:1px solid #334049;color:#edf0ee;padding:8px 10px}.impact-controls .ghost-button{height:34px;align-self:end}.impact-band{font-size:9px;color:#829098;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 .lineup-settings input[type=date]{display:block;margin-top:6px;background:#0b1013;border:1px solid #334049;color:#edf0ee;padding:8px}.lineup-settings .ghost-button{align-self:end;height:34px}.lineup-settings>span{align-self:end;padding-bottom:9px;font-size:8px;color:#69767e;white-space:nowrap}
+
+.replay-season-actions{display:flex;gap:8px;align-items:center}.replay-season-actions>span{font-size:8px;color:#6f7c84}.replay-season-actions .ghost-button{white-space:nowrap}@media(max-width:700px){.replay-season-actions{align-items:stretch;flex-direction:column}}
