@@ -683,3 +683,45 @@ def test_trade_scenario_exposes_persistent_team_strength():
     assert adjustments[b['team']] != 0
     assert adjustments[a['team']] * adjustments[b['team']] <= 0
     assert data['affected_games']
+
+
+def test_scenario_world_returns_complete_playoff_path():
+    r = client.post('/api/scenario/world?world_seed=123', json={
+        'as_of': '2026-01-15',
+        'trials': 100,
+        'seed': 2026,
+        'alpha': 1000,
+        'future_results': []
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data['seed'] == 123
+    assert len(data['standings']) == 30
+    assert len([row for row in data['standings'] if row['playoff_seed'] is not None]) == 16
+    assert len(data['play_in_games']) == 6
+    assert len(data['series']) == 15
+    assert data['champion']
+
+
+def test_scenario_world_honors_forced_result():
+    games = client.get('/api/games?before=2026-02-01&limit=100').json()
+    # Use Scenario schedule discovery indirectly through the synthetic season dates.
+    target = next(
+        game for game in GAMES
+        if game.game_date.isoformat() >= '2026-01-15'
+    )
+    r = client.post('/api/scenario/world?world_seed=124', json={
+        'as_of': '2026-01-15',
+        'trials': 100,
+        'seed': 2026,
+        'alpha': 1000,
+        'future_results': [{
+            'game_id': target.game_id,
+            'winner': target.away_team
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    game = next(row for row in data['remaining_games'] if row['game_id'] == target.game_id)
+    assert game['forced'] is True
+    assert game['winner'] == target.away_team
