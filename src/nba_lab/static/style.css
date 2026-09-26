@@ -30,3 +30,5 @@
 .sensitivity-badge{display:inline-block!important;margin-top:6px;padding:3px 5px;border:1px solid;border-radius:3px;font-style:normal;font-size:7px!important;letter-spacing:.08em;width:max-content}.sensitivity-badge.stable{color:var(--green);border-color:#31584d;background:#10201b}.sensitivity-badge.fragile{color:var(--red);border-color:#6c3934;background:#211310}.sensitivity-metric small{display:block;margin-top:5px;font-size:7px;color:#69767e}
 
 .impact-controls input[type=date]{display:block;margin-top:6px;background:#0b1013;border:1px solid #334049;color:#edf0ee;padding:8px 10px}.impact-controls .ghost-button{height:34px;align-self:end}.impact-band{font-size:9px;color:#829098;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.lineup-settings input[type=date]{display:block;margin-top:6px;background:#0b1013;border:1px solid #334049;color:#edf0ee;padding:8px}.lineup-settings .ghost-button{align-self:end;height:34px}.lineup-settings>span{align-self:end;padding-bottom:9px;font-size:8px;color:#69767e;white-space:nowrap}
