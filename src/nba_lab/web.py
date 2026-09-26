@@ -18,6 +18,7 @@ from .branch import compare_game_flip, flip_game
 from .demo import synthetic_demo_games
 from .demo_awards import synthetic_player_games
 from .diagnostics import calibration_curve
+from .elo import EloModel
 from .matchup import simulate_matchup
 from .impact import fit_rapm
 from .impact_source import load_impact_snapshot
@@ -313,6 +314,41 @@ def flip_game_result(request: FlipRequest):
             "after_rank": next(i + 1 for i, candidate in enumerate(award_after.candidates) if candidate.player_id == player_id),
         })
     award_ripple.sort(key=lambda row: abs(row["race_score_delta"]), reverse=True)
+
+    altered_games_for_ratings = list(GAMES)
+    for game_id in request.flipped_game_ids:
+        altered_games_for_ratings, _ = flip_game(altered_games_for_ratings, game_id)
+    model = EloModel()
+    ratings = model.fit_as_of(altered_games_for_ratings, request.as_of)
+    game_by_id = {game.game_id: game for game in GAMES}
+    affected_games = []
+    for game_id, adjustments in result.game_rating_adjustments.items():
+        game = game_by_id.get(game_id)
+        if game is None:
+            continue
+        home_delta = adjustments.get(game.home_team, 0.0)
+        away_delta = adjustments.get(game.away_team, 0.0)
+        base_home = model.win_probability(
+            ratings[game.home_team],
+            ratings[game.away_team],
+        )
+        altered_home = model.win_probability(
+            ratings[game.home_team] + home_delta,
+            ratings[game.away_team] + away_delta,
+        )
+        affected_games.append({
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+            "home_elo_delta": home_delta,
+            "away_elo_delta": away_delta,
+            "baseline_home_win_probability": base_home,
+            "altered_home_win_probability": altered_home,
+            "home_win_probability_delta": altered_home - base_home,
+        })
+    affected_games.sort(key=lambda row: (row["date"], row["game_id"]))
+
     return {
         "baseline": _serialize(result.baseline),
         "altered": _serialize(result.altered),
@@ -671,6 +707,7 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
         "player_absences": [asdict(row) for row in result.player_absences],
         "historical_flips": [asdict(row) for row in result.historical_flips],
         "trades": [asdict(row) for row in result.trades],
+        "affected_games": affected_games,
         "award_ripple": award_ripple[:8],
         "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games. Historical flips rebuild point-in-time team and award context.",
     }
