@@ -18,12 +18,15 @@ Point-in-time Elo, remaining-season Monte Carlo, play-in/playoffs/Finals, histor
 ### Scenario Lab
 Composable alternate worlds using:
 - historical game flips;
+- deterministic upcoming-game result assumptions;
 - RAPM-backed player absences;
 - RAPM-backed player-for-player trades;
 - game-specific strength adjustments;
 - league-wide win/playoff/title ripple;
 - point-in-time MVP ripple;
 - scenario-aware MVP future simulation;
+- scenario-aware Leverage re-ranking;
+- Leverage → forced-result Scenario branching;
 - reproducible share links.
 
 ### Matchup Lab
