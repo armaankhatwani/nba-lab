@@ -225,3 +225,51 @@ def sync_season_bundle(
     )
     manifest["manifest_artifact"] = manifest_artifact
     return manifest
+
+
+def load_bundle_manifest(path: str | Path = "data/nba_lab_bundle_manifest.json") -> dict | None:
+    """Load a season bundle manifest without requiring every artifact to exist."""
+    target = Path(path)
+    if not target.exists():
+        return None
+    try:
+        payload = json.loads(target.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid NBA Lab bundle manifest: {target}") from exc
+    if payload.get("schema_version") != 1:
+        raise ValueError(
+            f"unsupported NBA Lab bundle schema: {payload.get('schema_version')}"
+        )
+    if not payload.get("season"):
+        raise ValueError("NBA Lab bundle manifest is missing season")
+    return payload
+
+
+def bundle_summary(path: str | Path = "data/nba_lab_bundle_manifest.json") -> dict:
+    """Return lightweight bundle readiness metadata for the UI/status endpoint."""
+    manifest = load_bundle_manifest(path)
+    if manifest is None:
+        return {"kind": "none"}
+
+    replay_rows = manifest.get("replays") or []
+    replay_ok = sum(row.get("status") == "ok" for row in replay_rows)
+    replay_errors = sum(row.get("status") == "error" for row in replay_rows)
+    impact = manifest.get("impact") or {}
+    schedule = manifest.get("schedule") or {}
+    awards = manifest.get("awards") or {}
+    return {
+        "kind": "bundle_manifest",
+        "schema_version": manifest["schema_version"],
+        "season": manifest["season"],
+        "created_at": manifest.get("created_at"),
+        "schedule_games": schedule.get("games"),
+        "schedule_final_games": schedule.get("final_games"),
+        "schedule_path": schedule.get("path"),
+        "awards_path": awards.get("path"),
+        "replay_ok": replay_ok,
+        "replay_errors": replay_errors,
+        "impact_status": impact.get("status", "unknown"),
+        "impact_stints": impact.get("stints"),
+        "selection": manifest.get("selection") or {},
+        "manifest_path": str(path),
+    }
