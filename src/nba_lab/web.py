@@ -319,40 +319,6 @@ def flip_game_result(request: FlipRequest):
         })
     award_ripple.sort(key=lambda row: abs(row["race_score_delta"]), reverse=True)
 
-    altered_games_for_ratings = list(GAMES)
-    for game_id in request.flipped_game_ids:
-        altered_games_for_ratings, _ = flip_game(altered_games_for_ratings, game_id)
-    model = EloModel()
-    ratings = model.fit_as_of(altered_games_for_ratings, request.as_of)
-    game_by_id = {game.game_id: game for game in GAMES}
-    affected_games = []
-    for game_id, adjustments in result.game_rating_adjustments.items():
-        game = game_by_id.get(game_id)
-        if game is None:
-            continue
-        home_delta = adjustments.get(game.home_team, 0.0)
-        away_delta = adjustments.get(game.away_team, 0.0)
-        base_home = model.win_probability(
-            ratings[game.home_team],
-            ratings[game.away_team],
-        )
-        altered_home = model.win_probability(
-            ratings[game.home_team] + home_delta,
-            ratings[game.away_team] + away_delta,
-        )
-        affected_games.append({
-            "game_id": game.game_id,
-            "date": game.game_date.isoformat(),
-            "home_team": game.home_team,
-            "away_team": game.away_team,
-            "home_elo_delta": home_delta,
-            "away_elo_delta": away_delta,
-            "baseline_home_win_probability": base_home,
-            "altered_home_win_probability": altered_home,
-            "home_win_probability_delta": altered_home - base_home,
-        })
-    affected_games.sort(key=lambda row: (row["date"], row["game_id"]))
-
     return {
         "baseline": _serialize(result.baseline),
         "altered": _serialize(result.altered),
@@ -700,6 +666,38 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
             "race_share_delta": after.race_share - before.race_share,
         })
     award_ripple.sort(key=lambda row: abs(row["race_score_delta"]), reverse=True)
+
+    model = EloModel()
+    ratings = model.fit_as_of(altered_history, request.as_of)
+    game_by_id = {game.game_id: game for game in GAMES}
+    affected_games = []
+    for game_id, adjustments in result.game_rating_adjustments.items():
+        game = game_by_id.get(game_id)
+        if game is None:
+            continue
+        home_delta = adjustments.get(game.home_team, 0.0)
+        away_delta = adjustments.get(game.away_team, 0.0)
+        base_home = model.win_probability(
+            ratings[game.home_team],
+            ratings[game.away_team],
+        )
+        altered_home = model.win_probability(
+            ratings[game.home_team] + home_delta,
+            ratings[game.away_team] + away_delta,
+        )
+        affected_games.append({
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+            "home_elo_delta": home_delta,
+            "away_elo_delta": away_delta,
+            "baseline_home_win_probability": base_home,
+            "altered_home_win_probability": altered_home,
+            "home_win_probability_delta": altered_home - base_home,
+        })
+    affected_games.sort(key=lambda row: (row["date"], row["game_id"]))
+
     return {
         "as_of": request.as_of.isoformat(),
         "trials": request.trials,
