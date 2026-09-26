@@ -199,3 +199,26 @@ def test_scenario_api_composes_historical_flip_and_absence():
     assert len(data['historical_flips']) == 1
     assert data['historical_flips'][0]['original_winner'] != data['historical_flips'][0]['flipped_winner']
     assert 'award_ripple' in data
+
+
+def test_trade_only_scenario_api():
+    players = client.get('/api/impact?alpha=1000&limit=100').json()['players']
+    a = players[0]
+    b = next(row for row in reversed(players) if row['team'] != a['team'])
+    r = client.post('/api/scenario/player-absence', json={
+        'as_of': '2026-01-15',
+        'trials': 150,
+        'seed': 15,
+        'alpha': 1000,
+        'trades': [{
+            'player_a_id': a['player_id'],
+            'player_b_id': b['player_id'],
+            'minutes_per_game': 34
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data['trades']) == 1
+    effect = data['trades'][0]
+    assert effect['team_a'] != effect['team_b']
+    assert effect['team_a_elo_delta_per_game'] * effect['team_b_elo_delta_per_game'] <= 0
