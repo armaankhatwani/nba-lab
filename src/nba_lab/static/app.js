@@ -545,7 +545,8 @@ function scenarioShareSpec(){
     award_trials:Number($('scenario-award-trials').value||750),
     sensitivity_trials:Number($('scenario-sensitivity-trials').value||750),
     leverage_trials:Number($('scenario-leverage-trials').value||500),
-    leverage_limit:Number($('scenario-leverage-limit').value||10)
+    leverage_limit:Number($('scenario-leverage-limit').value||10),
+    lineup_limit:Number($('scenario-lineup-limit').value||4)
   };
 }
 function setScenarioShareStatus(message,isError){
@@ -572,6 +573,8 @@ function clearScenarioResults(){
   $('scenario-sensitivity-rows').innerHTML='<span>Run a scenario, then compare lower-signal, point, and upper-signal player-impact worlds.</span>';
   $('scenario-leverage-rows').classList.add('empty');
   $('scenario-leverage-rows').innerHTML='<span>Run a scenario, then re-rank upcoming games inside that alternate world.</span>';
+  $('scenario-lineup-results').classList.add('empty');
+  $('scenario-lineup-results').innerHTML='<span>Trade or remove a player, then recompute the affected teams\' best modeled five-man groups.</span>';
   $('scenario-award-future-bars').classList.add('empty');
   $('scenario-award-future-bars').innerHTML='<span>Run an alternate world, then propagate it through the remaining MVP simulation.</span>';
 }
@@ -585,6 +588,7 @@ async function applyScenarioShareSpec(spec){
   if(spec.sensitivity_trials)$('scenario-sensitivity-trials').value=String(spec.sensitivity_trials);
   if(spec.leverage_trials)$('scenario-leverage-trials').value=String(spec.leverage_trials);
   if(spec.leverage_limit)$('scenario-leverage-limit').value=String(spec.leverage_limit);
+  if(spec.lineup_limit)$('scenario-lineup-limit').value=String(spec.lineup_limit);
   await loadScenarioPlayers();
   await loadScenarioHistory();
   await loadScenarioFutureGames();
@@ -671,6 +675,7 @@ $('scenario-reset').onclick=async function(){
   $('scenario-sensitivity-trials').value='750';
   $('scenario-leverage-trials').value='500';
   $('scenario-leverage-limit').value='10';
+  $('scenario-lineup-limit').value='4';
   await loadScenarioPlayers();
   await loadScenarioHistory();
   await loadScenarioFutureGames();
@@ -984,6 +989,64 @@ function renderScenarioSensitivity(d){
       +'<div class="sensitivity-metric"><span>TITLE ODDS</span><div class="sensitivity-triplet"><strong class="low">'+pct(low[team].championship_probability)+'</strong><i>→</i><strong class="point">'+pct(point[team].championship_probability)+'</strong><i>→</i><strong class="high">'+pct(high[team].championship_probability)+'</strong></div>'+(titleRange?'<small>Δ range '+(titleRange[0]>=0?'+':'')+(100*titleRange[0]).toFixed(2)+' to '+(titleRange[1]>=0?'+':'')+(100*titleRange[1]).toFixed(2)+' pts</small>':'')+'</div>'
       +'</div>';
   }).join('');
+}
+
+
+$('scenario-lineups-run').onclick=async function(){
+  const button=$('scenario-lineups-run'),target=$('scenario-lineup-results');
+  button.disabled=true;
+  target.classList.add('empty');
+  target.innerHTML='<span>Rebuilding affected rosters and enumerating closing groups…</span>';
+  try{
+    const body=buildScenarioRequest();validateScenarioRequest(body);
+    if(!body.absences.length&&!body.trades.length)throw Error('This scenario does not change player availability or roster membership.');
+    const topK=Number($('scenario-lineup-limit').value);
+    const d=await json('/api/scenario/lineups?top_k='+topK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    renderScenarioLineups(d);
+  }catch(e){
+    target.classList.add('empty');
+    target.innerHTML='<span>'+e.message+'</span>';
+  }finally{button.disabled=false}
+};
+function scenarioLineupFive(row,kind,team,asOf,alpha){
+  const names=row.player_meta.map(function(p){return p.player_name}).join(' · ');
+  const evidence=row.observed_possessions>0
+    ? Math.round(row.observed_possessions)+' observed poss · '+Math.round(100*row.observed_weight)+'% empirical'
+    : 'unseen group · RAPM prior only';
+  const load=kind==='scenario'
+    ? '<button data-scenario-lineup-load="'+row.players.join(',')+'" data-lineup-team="'+team+'" data-lineup-asof="'+asOf+'" data-lineup-alpha="'+alpha+'">LOAD A ↗</button>'
+    : '';
+  return '<div class="scenario-lineup-five"><div><strong>'+names+'</strong><small>'+evidence+' · band '+row.blended_lower_80.toFixed(1)+' to '+row.blended_upper_80.toFixed(1)+'</small></div><strong>'+(row.blended_net_rating>=0?'+':'')+row.blended_net_rating.toFixed(1)+'</strong>'+load+'</div>';
+}
+function renderScenarioLineups(d){
+  const target=$('scenario-lineup-results');
+  if(!d.teams?.length){target.classList.add('empty');target.innerHTML='<span>No affected rosters could be optimized.</span>';return}
+  target.classList.remove('empty');
+  target.innerHTML=d.teams.map(function(team){
+    const delta=team.top_score_delta;
+    const deltaText=delta==null?'—':((delta>=0?'+':'')+delta.toFixed(1));
+    const baseline=team.baseline_lineups.slice(0,Math.min(2,team.baseline_lineups.length)).map(function(row){return scenarioLineupFive(row,'baseline',team.team,d.as_of,d.alpha)}).join('');
+    const scenario=team.scenario_lineups.slice(0,Math.min(3,team.scenario_lineups.length)).map(function(row){return scenarioLineupFive(row,'scenario',team.team,d.as_of,d.alpha)}).join('');
+    return '<div class="scenario-lineup-team">'
+      +'<div class="scenario-lineup-team-head"><strong>'+team.team+' closing groups</strong><span>'+team.baseline_candidate_players+' → '+team.scenario_candidate_players+' available players · top score <b class="scenario-lineup-delta '+((delta||0)>=0?'positive':'negative')+'">'+deltaText+'</b></span></div>'
+      +'<div class="scenario-lineup-worlds"><div class="scenario-lineup-world"><span>BASELINE ROSTER</span>'+baseline+'</div><div class="scenario-lineup-world"><span>SCENARIO ROSTER</span>'+scenario+'</div></div>'
+      +'</div>';
+  }).join('');
+  document.querySelectorAll('[data-scenario-lineup-load]').forEach(function(button){
+    button.onclick=async function(){
+      $('lineup-date').value=button.dataset.lineupAsof||'';
+      $('lineup-alpha').value=button.dataset.lineupAlpha||'1000';
+      openView('lineup');
+      await loadLineup();
+      const requested=button.dataset.scenarioLineupLoad.split(',');
+      const available=new Set(lineupPool.map(function(p){return p.player_id}));
+      lineupA=requested.filter(function(pid){return available.has(pid)});
+      lineupB=lineupB.filter(function(pid){return !lineupA.includes(pid)});
+      setLineupScenarioContext(button.dataset.lineupTeam,button.dataset.lineupAsof);
+      resetLineupResult();renderLineupSlots();renderLineupPool();
+      $('lineup-margin-note').textContent='Scenario closing group loaded into Lineup A';
+    };
+  });
 }
 
 $('scenario-awards-run').onclick=async function(){
