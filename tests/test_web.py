@@ -454,3 +454,23 @@ def test_lineup_compare_uses_historical_impact_slice():
     })
     assert r.status_code == 200
     assert r.json()['as_of'] == '2025-12-01'
+
+
+def test_lineup_optimizer_api_returns_ranked_team_fives():
+    r = client.get('/api/lineup/optimize?team=BOS&alpha=1000&prior_possessions=300&top_k=5')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['team'] == 'BOS'
+    assert data['candidate_players'] >= 5
+    assert 1 <= len(data['lineups']) <= 5
+    scores = [row['blended_net_rating'] for row in data['lineups']]
+    assert scores == sorted(scores, reverse=True)
+    assert all(len(row['players']) == 5 for row in data['lineups'])
+
+
+def test_lineup_optimizer_supports_historical_cutoff():
+    r = client.get('/api/lineup/optimize?team=BOS&alpha=1000&as_of=2025-12-01&top_k=3')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['as_of'] == '2025-12-01'
+    assert data['lineups']
