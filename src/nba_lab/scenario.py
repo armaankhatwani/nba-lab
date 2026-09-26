@@ -109,6 +109,7 @@ class ScenarioResult:
     player_absences: tuple[PlayerAbsenceEffect, ...]
     historical_flips: tuple[HistoricalFlipEffect, ...]
     trades: tuple[TradeEffect, ...]
+    game_rating_adjustments: dict[str, dict[str, float]]
 
 
 def elo_delta_for_margin(margin_delta: float, margin_sigma: float) -> float:
@@ -449,4 +450,5 @@ def simulate_scenario(
         player_absences=inputs.player_absences,
         historical_flips=inputs.historical_flips,
         trades=inputs.trades,
+        game_rating_adjustments=inputs.game_rating_adjustments,
     )
