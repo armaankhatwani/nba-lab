@@ -252,6 +252,20 @@ def build_scenario_inputs(
     flipped_game_ids: list[str] | None = None,
     trades: list[TradeIntervention] | None = None,
 ) -> ScenarioInputs:
+    absence_ids = [row.player_id for row in absences]
+    if len(absence_ids) != len(set(absence_ids)):
+        raise ValueError("each absent player may appear only once")
+    trade_players = [
+        player_id
+        for trade in (trades or [])
+        for player_id in (trade.player_a_id, trade.player_b_id)
+    ]
+    if len(trade_players) != len(set(trade_players)):
+        raise ValueError("a player may appear in only one trade")
+    overlap = set(absence_ids) & set(trade_players)
+    if overlap:
+        raise ValueError("a player cannot be both traded and absent in the same scenario yet")
+
     altered_games = list(games)
     flip_effects: list[HistoricalFlipEffect] = []
     for game_id in flipped_game_ids or []:
