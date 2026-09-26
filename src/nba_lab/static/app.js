@@ -678,6 +678,11 @@ function renderScenarioLeverage(d){
       +'<div class="scenario-leverage-cell"><span>VS BASELINE</span><strong class="'+(titleDelta>=0?'positive':'negative')+'">'+(titleDelta>=0?'+':'')+(100*titleDelta).toFixed(2)+' pts</strong></div>'
       +'</div>';
   }).join('');
+  target.querySelectorAll('.scenario-leverage-row').forEach(function(rowEl,index){
+    rowEl.dataset.scenarioGame=rows[index].game_id;
+    rowEl.title='Open this pivotal scenario game in Matchup Lab';
+    rowEl.onclick=function(){openScenarioMatchup(rowEl.dataset.scenarioGame)};
+  });
 }
 
 $('scenario-sensitivity-run').onclick=async function(){
