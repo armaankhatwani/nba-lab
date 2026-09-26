@@ -257,8 +257,8 @@
           <div class="panel replay-margin-panel"><div class="section-head"><div><span class="eyebrow">FINAL MARGIN DISTRIBUTION</span><h2>Where does the game finish?</h2></div></div><div id="replay-margin-dist" class="replay-margin-dist"></div></div>
         </div>
         <div class="panel replay-season-panel" id="replay-season-panel" hidden>
-          <div class="section-head"><div><span class="eyebrow">CROSS-LAB / SEASON RIPPLE</span><h2>How does this moment propagate beyond the game?</h2></div><span id="replay-season-note"></span></div>
-          <p class="replay-season-formula">Expected season effect = change in home-win probability × difference between the forced-home-win and forced-away-win season branches.</p>
+          <div class="section-head"><div><span class="eyebrow">CROSS-LAB / SEASON RIPPLE</span><h2>How does this moment propagate beyond the game?</h2></div><div class="replay-season-actions"><span id="replay-season-note"></span><button class="ghost-button" id="replay-to-scenario" hidden>BRANCH OPPOSITE RESULT ↗</button></div></div>
+          <p class="replay-season-formula">Expected season effect = change in home-win probability × difference between the forced-home-win and forced-away-win season branches. The branch button converts the game's opposite final winner into a deterministic Scenario world; it does not pretend the edited score state uniquely determines the final result.</p>
           <div id="replay-season-ripple" class="replay-season-ripple"></div>
         </div>
       </section>
