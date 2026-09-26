@@ -56,11 +56,17 @@ def test_award_future_can_override_player_team():
 
 def test_award_future_supports_forced_game_result():
     games,logs=data()
-    future=next(g for g in games if g.game_date>date(2026,1,6))
-    baseline=simulate_award_futures(games,logs,date(2026,1,6),trials=250,seed=29)
-    altered=simulate_award_futures(
-        games,logs,date(2026,1,6),trials=250,seed=29,
-        forced_winners={future.game_id: future.away_team},
+    cutoff=date(2026,1,6)
+    future=[g for g in games if g.game_date>cutoff]
+    nyk_world=simulate_award_futures(
+        games,logs,cutoff,trials=200,seed=29,
+        forced_winners={g.game_id:g.home_team for g in future},
     )
-    assert altered.candidates
-    assert baseline != altered
+    bos_world=simulate_award_futures(
+        games,logs,cutoff,trials=200,seed=29,
+        forced_winners={g.game_id:g.away_team for g in future},
+    )
+    nyk={c.player_id:c for c in nyk_world.candidates}
+    bos={c.player_id:c for c in bos_world.candidates}
+    assert nyk["a"].mean_final_score > bos["a"].mean_final_score
+    assert bos["b"].mean_final_score > nyk["b"].mean_final_score
