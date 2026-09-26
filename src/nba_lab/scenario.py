@@ -30,6 +30,12 @@ class TradeIntervention:
 
 
 @dataclass(frozen=True)
+class FutureResultIntervention:
+    game_id: str
+    winner: str
+
+
+@dataclass(frozen=True)
 class PlayerAbsenceEffect:
     player_id: str
     player_name: str
@@ -79,6 +85,15 @@ class TradeEffect:
 
 
 @dataclass(frozen=True)
+class FutureResultEffect:
+    game_id: str
+    game_date: date
+    home_team: str
+    away_team: str
+    forced_winner: str
+
+
+@dataclass(frozen=True)
 class HistoricalFlipEffect:
     game_id: str
     game_date: date
@@ -94,8 +109,10 @@ class ScenarioInputs:
     game_rating_adjustments: dict[str, dict[str, float]]
     impact_lower_adjustments: dict[str, dict[str, float]]
     impact_upper_adjustments: dict[str, dict[str, float]]
+    forced_winners: dict[str, str]
     player_absences: tuple[PlayerAbsenceEffect, ...]
     historical_flips: tuple[HistoricalFlipEffect, ...]
+    future_results: tuple[FutureResultEffect, ...]
     trades: tuple[TradeEffect, ...]
 
 
@@ -108,6 +125,7 @@ class ScenarioResult:
     deltas: tuple[TeamDelta, ...]
     player_absences: tuple[PlayerAbsenceEffect, ...]
     historical_flips: tuple[HistoricalFlipEffect, ...]
+    future_results: tuple[FutureResultEffect, ...]
     trades: tuple[TradeEffect, ...]
     game_rating_adjustments: dict[str, dict[str, float]]
 
@@ -358,6 +376,7 @@ def build_scenario_inputs(
     rapm: RapmResult,
     absences: list[PlayerAbsence],
     flipped_game_ids: list[str] | None = None,
+    future_results: list[FutureResultIntervention] | None = None,
     trades: list[TradeIntervention] | None = None,
 ) -> ScenarioInputs:
     absence_ids = [row.player_id for row in absences]
@@ -373,6 +392,30 @@ def build_scenario_inputs(
     overlap = set(absence_ids) & set(trade_players)
     if overlap:
         raise ValueError("a player cannot be both traded and absent in the same scenario yet")
+
+    future_rows = list(future_results or [])
+    future_ids = [row.game_id for row in future_rows]
+    if len(future_ids) != len(set(future_ids)):
+        raise ValueError("each future game may be forced only once")
+    game_by_id = {game.game_id: game for game in games}
+    forced_winners: dict[str, str] = {}
+    future_effects: list[FutureResultEffect] = []
+    for row in future_rows:
+        game = game_by_id.get(row.game_id)
+        if game is None:
+            raise ValueError(f"unknown future game id: {row.game_id}")
+        if game.game_date < as_of:
+            raise ValueError("forced future results must occur on or after the as-of date")
+        if row.winner not in {game.home_team, game.away_team}:
+            raise ValueError(f"forced winner {row.winner} is not in game {row.game_id}")
+        forced_winners[row.game_id] = row.winner
+        future_effects.append(FutureResultEffect(
+            game_id=game.game_id,
+            game_date=game.game_date,
+            home_team=game.home_team,
+            away_team=game.away_team,
+            forced_winner=row.winner,
+        ))
 
     altered_games = list(games)
     flip_effects: list[HistoricalFlipEffect] = []
@@ -405,8 +448,10 @@ def build_scenario_inputs(
         game_rating_adjustments=adjustments,
         impact_lower_adjustments=impact_lower,
         impact_upper_adjustments=impact_upper,
+        forced_winners=forced_winners,
         player_absences=absence_effects,
         historical_flips=tuple(flip_effects),
+        future_results=tuple(future_effects),
         trades=trade_effects,
     )
 
@@ -418,6 +463,7 @@ def simulate_scenario(
     rapm: RapmResult,
     absences: list[PlayerAbsence],
     flipped_game_ids: list[str] | None = None,
+    future_results: list[FutureResultIntervention] | None = None,
     trades: list[TradeIntervention] | None = None,
     trials: int = 5000,
     seed: int = 2026,
@@ -429,6 +475,7 @@ def simulate_scenario(
         rapm,
         absences,
         flipped_game_ids=flipped_game_ids,
+        future_results=future_results,
         trades=trades,
     )
     baseline = simulate_remaining_season(
@@ -440,6 +487,7 @@ def simulate_scenario(
         trials=trials,
         seed=seed,
         game_rating_adjustments=inputs.game_rating_adjustments,
+        forced_winners=inputs.forced_winners,
     )
 
     return ScenarioResult(
@@ -450,6 +498,7 @@ def simulate_scenario(
         deltas=build_team_deltas(baseline, altered),
         player_absences=inputs.player_absences,
         historical_flips=inputs.historical_flips,
+        future_results=inputs.future_results,
         trades=inputs.trades,
         game_rating_adjustments=inputs.game_rating_adjustments,
     )
