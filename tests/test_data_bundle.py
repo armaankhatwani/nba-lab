@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 from nba_lab.data_bundle import (
+    bundle_summary,
+    load_bundle_manifest,
     select_replay_games,
     sync_season_bundle,
     write_json_artifact,
@@ -158,3 +160,33 @@ def test_bundle_sync_records_partial_replay_failure_and_manifest(tmp_path):
     persisted = json.loads((tmp_path / "nba_lab_bundle_manifest.json").read_text())
     assert persisted["selection"]["replay_teams"] == ["BOS"]
     assert persisted["selection"]["impact_teams"] == ["BOS", "NYK"]
+
+
+def test_bundle_summary_handles_missing_and_valid_manifest(tmp_path):
+    missing = bundle_summary(tmp_path / "missing.json")
+    assert missing == {"kind": "none"}
+
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps({
+        "schema_version": 1,
+        "season": "2025-26",
+        "created_at": "2026-09-26T00:00:00+00:00",
+        "schedule": {"games": 82, "final_games": 70, "path": "schedule.json"},
+        "awards": {"path": "players.json"},
+        "replays": [
+            {"status": "ok"},
+            {"status": "ok"},
+            {"status": "error"},
+        ],
+        "impact": {"status": "ok", "stints": 1234},
+        "selection": {"replay_count": 3},
+    }))
+    loaded = load_bundle_manifest(path)
+    assert loaded["season"] == "2025-26"
+
+    summary = bundle_summary(path)
+    assert summary["kind"] == "bundle_manifest"
+    assert summary["replay_ok"] == 2
+    assert summary["replay_errors"] == 1
+    assert summary["impact_status"] == "ok"
+    assert summary["impact_stints"] == 1234
