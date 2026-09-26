@@ -569,7 +569,7 @@ def test_scenario_lineups_apply_trade_and_absence_to_selected_game():
         'prior_possessions': 300,
         'top_k': 3,
     }
-    r = client.post('/api/scenario/lineups', json=request)
+    r = client.post('/api/scenario/game-lineups', json=request)
     assert r.status_code == 200
     data = r.json()
 
