@@ -30,6 +30,7 @@ def evaluate_game_leverage(
     as_of: date,
     trials: int = 1000,
     seed: int = 2026,
+    game_rating_adjustments: dict[str, dict[str, float]] | None = None,
 ) -> GameLeverage:
     if game.game_date < as_of:
         raise ValueError("leverage game must be on or after the as-of date")
@@ -39,6 +40,7 @@ def evaluate_game_leverage(
         as_of,
         trials=trials,
         seed=seed,
+        game_rating_adjustments=game_rating_adjustments,
         forced_winners={game.game_id: game.home_team},
     )
     away_world = simulate_remaining_season(
@@ -46,6 +48,7 @@ def evaluate_game_leverage(
         as_of,
         trials=trials,
         seed=seed,
+        game_rating_adjustments=game_rating_adjustments,
         forced_winners={game.game_id: game.away_team},
     )
     home = _team_map(home_world)
@@ -90,13 +93,21 @@ def rank_upcoming_games(
     trials: int = 1000,
     seed: int = 2026,
     limit: int = 12,
+    game_rating_adjustments: dict[str, dict[str, float]] | None = None,
 ) -> tuple[GameLeverage, ...]:
     upcoming = sorted(
         (game for game in games if game.game_date >= as_of),
         key=lambda game: (game.game_date, game.game_id),
     )[: max(1, limit)]
     rows = [
-        evaluate_game_leverage(games, game, as_of, trials=trials, seed=seed)
+        evaluate_game_leverage(
+            games,
+            game,
+            as_of,
+            trials=trials,
+            seed=seed,
+            game_rating_adjustments=game_rating_adjustments,
+        )
         for game in upcoming
     ]
     rows.sort(
