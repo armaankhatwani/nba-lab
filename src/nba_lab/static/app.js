@@ -374,16 +374,18 @@ $('scenario-trade-enabled').onchange=function(){
   updateScenarioCountPreview();
 };
 $('scenario-trade-a').onchange=function(){
-  if(this.value===$('scenario-trade-b').value||sameScenarioTradeTeam()){
-    const a=scenarioPlayers.find(function(p){return p.player_id===this.value});
-    const other=scenarioPlayers.find(function(p){return p.player_id!==this.value&&(!a||p.team!==a.team)});
+  const value=this.value;
+  if(value===$('scenario-trade-b').value||sameScenarioTradeTeam()){
+    const a=scenarioPlayers.find(function(p){return p.player_id===value});
+    const other=scenarioPlayers.find(function(p){return p.player_id!==value&&(!a||p.team!==a.team)});
     if(other)$('scenario-trade-b').value=other.player_id;
   }
 };
 $('scenario-trade-b').onchange=function(){
-  if(this.value===$('scenario-trade-a').value||sameScenarioTradeTeam()){
-    const b=scenarioPlayers.find(function(p){return p.player_id===this.value});
-    const other=scenarioPlayers.find(function(p){return p.player_id!==this.value&&(!b||p.team!==b.team});
+  const value=this.value;
+  if(value===$('scenario-trade-a').value||sameScenarioTradeTeam()){
+    const b=scenarioPlayers.find(function(p){return p.player_id===value});
+    const other=scenarioPlayers.find(function(p){return p.player_id!==value&&(!b||p.team!==b.team)});
     if(other)$('scenario-trade-a').value=other.player_id;
   }
 };
