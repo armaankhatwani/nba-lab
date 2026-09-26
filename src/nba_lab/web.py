@@ -24,9 +24,10 @@ from .matchup import simulate_matchup
 from .model_selection import evaluate_elo_surface
 from .impact import fit_rapm
 from .impact_source import load_impact_snapshot, snapshot_as_of
-from .lineup import compare_lineups, optimize_lineups
+from .lineup import compare_lineups, most_observed_lineup, optimize_lineups
 from .leverage import rank_upcoming_games
 from .replay import compare_replay_intervention
+from .replay_lineup import build_replay_lineup_intervention
 from .replay_source import load_replay_directory
 from .replay_season import propagate_replay_to_season
 from .demo_impact import synthetic_impact_snapshot
@@ -177,6 +178,11 @@ class ReplaySimRequest(BaseModel):
     seed: int = 2026
     home_score_delta: int = Field(default=0, ge=-20, le=20)
     away_score_delta: int = Field(default=0, ge=-20, le=20)
+    lineup_side: str | None = None
+    baseline_lineup: list[str] = Field(default_factory=list)
+    altered_lineup: list[str] = Field(default_factory=list)
+    lineup_alpha: float = Field(default=1000.0, gt=0, le=10000)
+    lineup_prior_possessions: float = Field(default=300.0, gt=0, le=5000)
 
 
 class PlayerAbsenceRequest(BaseModel):
