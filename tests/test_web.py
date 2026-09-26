@@ -387,3 +387,27 @@ def test_scenario_matchup_uses_exact_affected_game_adjustment():
         assert data['scenario']['team_a_rating'] < data['baseline']['team_a_rating']
     else:
         assert data['scenario']['team_b_rating'] < data['baseline']['team_b_rating']
+
+
+def test_scenario_api_can_return_rapm_sensitivity_ranges():
+    r = client.post('/api/scenario/player-absence', json={
+        'as_of': '2026-01-15',
+        'trials': 120,
+        'seed': 71,
+        'alpha': 1000,
+        'include_impact_sensitivity': True,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 3,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data['impact_sensitivity']
+    row = next(item for item in data['impact_sensitivity'] if item['team'] == 'BOS')
+    altered = next(item for item in data['altered']['teams'] if item['team'] == 'BOS')
+    assert row['expected_wins_min'] <= altered['expected_wins'] <= row['expected_wins_max']
+    assert row['playoffs_probability_min'] <= altered['playoffs_probability'] <= row['playoffs_probability_max']
+    assert row['championship_probability_min'] <= altered['championship_probability'] <= row['championship_probability_max']
