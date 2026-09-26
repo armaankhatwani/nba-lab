@@ -178,6 +178,10 @@ class PlayerAbsenceScenarioRequest(BaseModel):
     trades: list[TradeRequest] = Field(default_factory=list)
 
 
+class ScenarioMatchupRequest(PlayerAbsenceScenarioRequest):
+    game_id: str
+
+
 def _scenario_absences(request: PlayerAbsenceScenarioRequest):
     return [
         PlayerAbsence(
@@ -710,6 +714,65 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
         "affected_games": affected_games,
         "award_ripple": award_ripple[:8],
         "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games. Historical flips rebuild point-in-time team and award context.",
+    }
+
+
+@app.post("/api/scenario/matchup")
+def scenario_matchup(request: ScenarioMatchupRequest):
+    if not request.absences and not request.flipped_game_ids and not request.trades:
+        raise HTTPException(422, "scenario requires at least one intervention")
+    game = next((row for row in GAMES if row.game_id == request.game_id), None)
+    if game is None:
+        raise HTTPException(404, f"Unknown scheduled game: {request.game_id}")
+    if game.game_date < request.as_of:
+        raise HTTPException(422, "scenario matchup must be on or after the as-of date")
+    try:
+        inputs = build_scenario_inputs(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            _impact_result(float(request.alpha)),
+            _scenario_absences(request),
+            flipped_game_ids=request.flipped_game_ids,
+            trades=_scenario_trades(request),
+        )
+        baseline = simulate_matchup(
+            list(inputs.altered_games),
+            game.home_team,
+            game.away_team,
+            request.as_of,
+            trials=request.trials,
+            best_of=1,
+            seed=request.seed,
+        )
+        adjustments = inputs.game_rating_adjustments.get(game.game_id, {})
+        altered = simulate_matchup(
+            list(inputs.altered_games),
+            game.home_team,
+            game.away_team,
+            request.as_of,
+            trials=request.trials,
+            best_of=1,
+            seed=request.seed,
+            rating_adjustments=adjustments,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    return {
+        "game": {
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+        },
+        "rating_adjustments": adjustments,
+        "baseline": asdict(baseline),
+        "scenario": asdict(altered),
+        "home_win_probability_delta": (
+            altered.team_a_series_probability - baseline.team_a_series_probability
+        ),
+        "warning": "The scenario adjustment changes the frozen pregame team-strength prior for this scheduled game; it is not a causal player-on/off game prediction.",
     }
 
 
