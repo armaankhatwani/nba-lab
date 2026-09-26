@@ -505,3 +505,17 @@ def test_lineup_optimizer_supports_historical_cutoff():
     data = r.json()
     assert data['as_of'] == '2025-12-01'
     assert data['lineups']
+
+
+def test_replay_timeline_endpoint_ranks_turning_points():
+    listing = client.get('/api/replay/games').json()['games']
+    game_id = listing[0]['game_id']
+    replay = client.get(f'/api/replay/{game_id}').json()
+    timeline = client.get(f'/api/replay/{game_id}/timeline?limit=5')
+    assert timeline.status_code == 200
+    data = timeline.json()
+    assert len(data['points']) == len(replay['events'])
+    assert len(data['turning_points']) <= 5
+    assert all(0 <= row['home_win_probability'] <= 1 for row in data['points'])
+    swings = [abs(row['probability_swing']) for row in data['turning_points']]
+    assert swings == sorted(swings, reverse=True)
