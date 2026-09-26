@@ -40,6 +40,7 @@ def simulate_award_futures(
     trials: int = 1_000,
     seed: int = 2026,
     candidate_limit: int = 10,
+    rating_adjustments: dict[str, float] | None = None,
     game_rating_adjustments: dict[str, dict[str, float]] | None = None,
     player_unavailable_game_ids: dict[str, set[str]] | None = None,
     player_team_overrides: dict[str, str] | None = None,
@@ -75,6 +76,11 @@ def simulate_award_futures(
         availability[pid]=min(1.0,len(rows)/max(1,team_games_so_far[team]))
 
     ratings=model.fit_as_of(games, as_of + timedelta(days=1))
+    persistent_adjustments = rating_adjustments or {}
+    ratings = {
+        team: rating + persistent_adjustments.get(team, 0.0)
+        for team, rating in ratings.items()
+    }
     game_adjustments = game_rating_adjustments or {}
     unavailable = player_unavailable_game_ids or {}
     team_overrides = player_team_overrides or {}
