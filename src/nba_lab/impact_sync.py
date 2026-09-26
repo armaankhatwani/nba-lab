@@ -118,7 +118,9 @@ def build_impact_snapshot(
                 qa["possessions_skipped"] += 1
                 continue
             qa["possessions_kept"] += 1
-            stints.append(asdict(stint))
+            row = asdict(stint)
+            row["game_date"] = schedule_game.game_date.isoformat()
+            stints.append(row)
 
     payload = {
         "source": "pbpstats_possessions",
