@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from nba_lab.demo import synthetic_demo_games
 from nba_lab.demo_impact import synthetic_impact_snapshot
 from nba_lab.impact import fit_rapm
