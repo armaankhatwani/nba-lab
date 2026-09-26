@@ -816,14 +816,22 @@ def run_scenario(request: ScenarioRequest):
 
     model = EloModel()
     ratings = model.fit_as_of(altered_history, request.as_of)
-    game_by_id = {game.game_id: game for game in GAMES}
     affected_games = []
-    for game_id, adjustments in result.game_rating_adjustments.items():
-        game = game_by_id.get(game_id)
-        if game is None:
+    for game in sorted(
+        (row for row in GAMES if row.game_date >= request.as_of),
+        key=lambda row: (row.game_date, row.game_id),
+    ):
+        per_game = result.game_rating_adjustments.get(game.game_id, {})
+        home_delta = (
+            result.team_rating_adjustments.get(game.home_team, 0.0)
+            + per_game.get(game.home_team, 0.0)
+        )
+        away_delta = (
+            result.team_rating_adjustments.get(game.away_team, 0.0)
+            + per_game.get(game.away_team, 0.0)
+        )
+        if abs(home_delta) < 1e-12 and abs(away_delta) < 1e-12:
             continue
-        home_delta = adjustments.get(game.home_team, 0.0)
-        away_delta = adjustments.get(game.away_team, 0.0)
         base_home = model.win_probability(
             ratings[game.home_team],
             ratings[game.away_team],
@@ -839,11 +847,12 @@ def run_scenario(request: ScenarioRequest):
             "away_team": game.away_team,
             "home_elo_delta": home_delta,
             "away_elo_delta": away_delta,
+            "persistent_home_elo_delta": result.team_rating_adjustments.get(game.home_team, 0.0),
+            "persistent_away_elo_delta": result.team_rating_adjustments.get(game.away_team, 0.0),
             "baseline_home_win_probability": base_home,
             "altered_home_win_probability": altered_home,
             "home_win_probability_delta": altered_home - base_home,
         })
-    affected_games.sort(key=lambda row: (row["date"], row["game_id"]))
 
     return {
         "as_of": request.as_of.isoformat(),
@@ -857,6 +866,7 @@ def run_scenario(request: ScenarioRequest):
         "historical_flips": [asdict(row) for row in result.historical_flips],
         "future_results": [asdict(row) for row in result.future_results],
         "trades": [asdict(row) for row in result.trades],
+        "team_rating_adjustments": result.team_rating_adjustments,
         "affected_games": affected_games,
         "award_ripple": award_ripple[:8],
         "warning": "Scenario outputs are model counterfactuals. Player interventions use RAPM association estimates; historical branches rebuild point-in-time context; forced future results are deterministic assumptions inside every simulated path.",
@@ -892,7 +902,12 @@ def scenario_matchup(request: ScenarioMatchupRequest):
             best_of=1,
             seed=request.seed,
         )
-        adjustments = inputs.game_rating_adjustments.get(game.game_id, {})
+        per_game = inputs.game_rating_adjustments.get(game.game_id, {})
+        adjustments = {
+            team: inputs.team_rating_adjustments.get(team, 0.0) + per_game.get(team, 0.0)
+            for team in (game.home_team, game.away_team)
+            if abs(inputs.team_rating_adjustments.get(team, 0.0) + per_game.get(team, 0.0)) > 1e-12
+        }
         altered = simulate_matchup(
             list(inputs.altered_games),
             game.home_team,
@@ -955,6 +970,7 @@ def scenario_sensitivity(request: ScenarioRequest, sensitivity_trials: int = 750
         request.as_of,
         trials=sensitivity_trials,
         seed=request.seed,
+        rating_adjustments=inputs.team_rating_adjustments,
         game_rating_adjustments=inputs.game_rating_adjustments,
         forced_winners=inputs.forced_winners,
     )
@@ -963,6 +979,7 @@ def scenario_sensitivity(request: ScenarioRequest, sensitivity_trials: int = 750
         request.as_of,
         trials=sensitivity_trials,
         seed=request.seed,
+        rating_adjustments=inputs.impact_lower_team_adjustments,
         game_rating_adjustments=inputs.impact_lower_adjustments,
         forced_winners=inputs.forced_winners,
     )
@@ -971,6 +988,7 @@ def scenario_sensitivity(request: ScenarioRequest, sensitivity_trials: int = 750
         request.as_of,
         trials=sensitivity_trials,
         seed=request.seed,
+        rating_adjustments=inputs.impact_upper_team_adjustments,
         game_rating_adjustments=inputs.impact_upper_adjustments,
         forced_winners=inputs.forced_winners,
     )
@@ -1202,6 +1220,7 @@ def scenario_awards(request: ScenarioRequest, award_trials: int = 750):
         request.as_of,
         trials=award_trials,
         seed=request.seed,
+        rating_adjustments=inputs.team_rating_adjustments,
         game_rating_adjustments=inputs.game_rating_adjustments,
         player_unavailable_game_ids=unavailable,
         player_team_overrides=team_overrides,
@@ -1280,6 +1299,7 @@ def scenario_leverage(
             trials=leverage_trials,
             seed=request.seed,
             limit=limit,
+            rating_adjustments=inputs.team_rating_adjustments,
             game_rating_adjustments=inputs.game_rating_adjustments,
             excluded_game_ids=set(inputs.forced_winners),
             forced_winners=inputs.forced_winners,
