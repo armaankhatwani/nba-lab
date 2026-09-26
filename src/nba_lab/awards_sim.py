@@ -43,6 +43,7 @@ def simulate_award_futures(
     game_rating_adjustments: dict[str, dict[str, float]] | None = None,
     player_unavailable_game_ids: dict[str, set[str]] | None = None,
     player_team_overrides: dict[str, str] | None = None,
+    forced_winners: dict[str, str] | None = None,
     model: EloModel | None = None,
 ) -> AwardFutureResult:
     if trials < 1:
@@ -77,6 +78,7 @@ def simulate_award_futures(
     game_adjustments = game_rating_adjustments or {}
     unavailable = player_unavailable_game_ids or {}
     team_overrides = player_team_overrides or {}
+    forced = forced_winners or {}
     rng=random.Random(seed)
     leaders=Counter(); top3=Counter(); score_sums=Counter()
     identity={c.player_id:(c.player_name,c.team) for c in current.candidates if c.player_id in candidate_ids}
@@ -84,11 +86,18 @@ def simulate_award_futures(
     for _ in range(trials):
         sim_games=list(observed_games)
         for game in future_schedule:
-            per_game = game_adjustments.get(game.game_id, {})
-            home_rating = ratings[game.home_team] + per_game.get(game.home_team, 0.0)
-            away_rating = ratings[game.away_team] + per_game.get(game.away_team, 0.0)
-            p_home=model.win_probability(home_rating,away_rating)
-            sim_games.append(_future_game(game,rng.random()<p_home))
+            if game.game_id in forced:
+                rng.random()  # preserve paired stream against the baseline world
+                winner = forced[game.game_id]
+                if winner not in {game.home_team, game.away_team}:
+                    raise ValueError(f"forced winner {winner} is not in game {game.game_id}")
+                sim_games.append(_future_game(game, winner == game.home_team))
+            else:
+                per_game = game_adjustments.get(game.game_id, {})
+                home_rating = ratings[game.home_team] + per_game.get(game.home_team, 0.0)
+                away_rating = ratings[game.away_team] + per_game.get(game.away_team, 0.0)
+                p_home=model.win_probability(home_rating,away_rating)
+                sim_games.append(_future_game(game,rng.random()<p_home))
 
         sim_logs=list(observed_logs)
         for pid,rows in rows_by_player.items():
