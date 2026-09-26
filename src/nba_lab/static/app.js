@@ -496,7 +496,6 @@ async function loadScenario(){
   await loadScenarioPlayers();
   await loadScenarioHistory();
   await loadScenarioFutureGames();
-  if(!scenarioAbsences.length) addScenarioAbsence(selectedImpactPlayerId||((scenarioPlayers[0]||{}).player_id));
   renderScenarioAbsences();
 }
 async function loadScenarioHistory(){
