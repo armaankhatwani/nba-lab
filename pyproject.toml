@@ -20,6 +20,7 @@ nba-lab-sync = "nba_lab.cli:sync"
 nba-lab-sync-awards = "nba_lab.cli:sync_awards"
 nba-lab-sync-impact = "nba_lab.cli:sync_impact"
 nba-lab-sync-replay = "nba_lab.cli:sync_replay"
+nba-lab-sync-bundle = "nba_lab.cli:sync_bundle"
 
 [tool.setuptools.packages.find]
 where = ["src"]
