@@ -37,23 +37,44 @@ class EloModel:
         )
 
     def fit_as_of(self, games: list[Game], as_of) -> dict[str, float]:
+        """Fit a date-level point-in-time state without same-day ordering effects."""
         ratings = defaultdict(lambda: self.base)
-        for game in sorted(games, key=lambda g: (g.game_date, g.game_id)):
-            if game.game_date >= as_of or not game.is_final:
-                continue
-            home_rating = ratings[game.home_team]
-            away_rating = ratings[game.away_team]
-            p_home = self.win_probability(home_rating, away_rating)
-            actual_home = 1.0 if game.winner == game.home_team else 0.0
-            delta = self.rating_delta(
-                game,
-                home_rating,
-                away_rating,
-                p_home,
-                actual_home,
-            )
-            ratings[game.home_team] += delta
-            ratings[game.away_team] -= delta
+        finals = sorted(
+            (
+                game
+                for game in games
+                if game.is_final and game.game_date < as_of
+            ),
+            key=lambda game: (game.game_date, game.game_id),
+        )
+
+        cursor = 0
+        while cursor < len(finals):
+            day = finals[cursor].game_date
+            day_games = []
+            while cursor < len(finals) and finals[cursor].game_date == day:
+                day_games.append(finals[cursor])
+                cursor += 1
+
+            updates = []
+            for game in day_games:
+                home_rating = ratings[game.home_team]
+                away_rating = ratings[game.away_team]
+                p_home = self.win_probability(home_rating, away_rating)
+                actual_home = 1.0 if game.winner == game.home_team else 0.0
+                delta = self.rating_delta(
+                    game,
+                    home_rating,
+                    away_rating,
+                    p_home,
+                    actual_home,
+                )
+                updates.append((game.home_team, game.away_team, delta))
+
+            for home_team, away_team, delta in updates:
+                ratings[home_team] += delta
+                ratings[away_team] -= delta
+
         teams = {g.home_team for g in games} | {g.away_team for g in games}
         return {team: ratings[team] for team in teams}
 
