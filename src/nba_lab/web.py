@@ -1002,6 +1002,75 @@ def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 7
     }
 
 
+@app.post("/api/scenario/leverage")
+def scenario_leverage(
+    request: PlayerAbsenceScenarioRequest,
+    leverage_trials: int = 500,
+    limit: int = 10,
+):
+    if not request.absences and not request.flipped_game_ids and not request.trades:
+        raise HTTPException(422, "scenario requires at least one intervention")
+    leverage_trials = max(100, min(leverage_trials, 5000))
+    limit = max(1, min(limit, 20))
+    try:
+        inputs = build_scenario_inputs(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            _impact_result(float(request.alpha), request.as_of),
+            _scenario_absences(request),
+            flipped_game_ids=request.flipped_game_ids,
+            trades=_scenario_trades(request),
+        )
+        baseline_rows = rank_upcoming_games(
+            GAMES,
+            request.as_of,
+            trials=leverage_trials,
+            seed=request.seed,
+            limit=limit,
+        )
+        scenario_rows = rank_upcoming_games(
+            list(inputs.altered_games),
+            request.as_of,
+            trials=leverage_trials,
+            seed=request.seed,
+            limit=limit,
+            game_rating_adjustments=inputs.game_rating_adjustments,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    baseline_by = {
+        row.game_id: (rank, row)
+        for rank, row in enumerate(baseline_rows, 1)
+    }
+    rows = []
+    for scenario_rank, row in enumerate(scenario_rows, 1):
+        baseline_rank, baseline = baseline_by[row.game_id]
+        rows.append({
+            **asdict(row),
+            "scenario_rank": scenario_rank,
+            "baseline_rank": baseline_rank,
+            "rank_movement": baseline_rank - scenario_rank,
+            "baseline_title_distribution_shift": baseline.title_distribution_shift,
+            "baseline_playoff_distribution_shift": baseline.playoff_distribution_shift,
+            "title_distribution_shift_delta": (
+                row.title_distribution_shift - baseline.title_distribution_shift
+            ),
+            "playoff_distribution_shift_delta": (
+                row.playoff_distribution_shift - baseline.playoff_distribution_shift
+            ),
+        })
+
+    return {
+        "as_of": request.as_of.isoformat(),
+        "trials_per_world": leverage_trials,
+        "window_games": limit,
+        "rows": rows,
+        "warning": "Scenario leverage measures model sensitivity to each possible game result inside the composed alternate world; rank movement is relative to the baseline league over the same schedule window.",
+    }
+
+
 @app.get("/api/timeline/{team}")
 def timeline(team: str):
     if team not in TEAMS:

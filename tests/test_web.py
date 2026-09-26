@@ -454,3 +454,34 @@ def test_lineup_compare_uses_historical_impact_slice():
     })
     assert r.status_code == 200
     assert r.json()['as_of'] == '2025-12-01'
+
+
+def test_scenario_leverage_compares_rankings_to_baseline():
+    r = client.post('/api/scenario/leverage?leverage_trials=120&limit=5', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 91,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 3,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data['rows']) == 5
+    assert {row['scenario_rank'] for row in data['rows']} == {1, 2, 3, 4, 5}
+    assert {row['baseline_rank'] for row in data['rows']} == {1, 2, 3, 4, 5}
+    assert all('rank_movement' in row for row in data['rows'])
+
+
+def test_scenario_leverage_requires_an_intervention():
+    r = client.post('/api/scenario/leverage?leverage_trials=100&limit=3', json={
+        'as_of': '2026-01-15',
+        'trials': 100,
+        'seed': 92,
+        'alpha': 1000
+    })
+    assert r.status_code == 422
