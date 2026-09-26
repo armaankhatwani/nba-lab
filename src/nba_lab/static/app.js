@@ -37,7 +37,69 @@ function renderMatchup(d){const pa=d.team_a_series_probability,pb=d.team_b_serie
 $('timeline-team').onchange=loadTimeline;
 async function loadTimeline(){const team=$('timeline-team').value||'NYK';const d=await json(`/api/timeline/${team}`);$('tl-record').textContent=`${d.summary.wins}-${d.summary.losses}`;$('tl-current').textContent=d.summary.current_rating.toFixed(0);$('tl-peak').textContent=d.summary.peak_rating.toFixed(0);$('tl-range').textContent=`${d.summary.low_rating.toFixed(0)} → ${d.summary.peak_rating.toFixed(0)}`;$('tl-title').textContent=`${d.team.name} · Elo trajectory`;drawTimeline(d.points);$('timeline-games').innerHTML=d.points.slice(-16).reverse().map(p=>`<div class="game-chip ${p.win?'win':'loss'}"><span>${p.date} · ${p.home?'vs':'@'} ${p.opponent}</span><strong>${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin}</strong><span>${p.wins}-${p.losses} · Elo ${p.rating.toFixed(0)}</span></div>`).join('')}
 function drawTimeline(points){const el=$('timeline-chart');if(!points.length){el.innerHTML='';return}const W=900,H=250,pad=34;const vals=points.map(p=>p.rating);const min=Math.min(...vals)-15,max=Math.max(...vals)+15;const x=i=>pad+(W-2*pad)*(i/Math.max(1,points.length-1));const y=v=>H-pad-(H-2*pad)*((v-min)/(max-min));const path=points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.rating).toFixed(1)}`).join(' ');const grids=[min,(min+max)/2,max];el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grids.map(v=>`<line class="grid" x1="${pad}" y1="${y(v)}" x2="${W-pad}" y2="${y(v)}"/><text x="2" y="${y(v)+3}">${v.toFixed(0)}</text>`).join('')}<path class="line" d="${path}"/>${points.map((p,i)=>`<circle class="point ${p.win?'win':'loss'}" cx="${x(i)}" cy="${y(p.rating)}" r="4"><title>${p.date} · ${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin} vs ${p.opponent} · Elo ${p.rating}</title></circle>`).join('')}</svg>`}
-async function loadDiagnostics(){if(diagnosticsLoaded)return;const d=await json('/api/diagnostics');diagnosticsLoaded=true;$('md-brier').textContent=d.metrics.brier.toFixed(3);$('md-logloss').textContent=d.metrics.log_loss.toFixed(3);$('md-accuracy').textContent=pct(d.metrics.accuracy);$('md-games').textContent=d.metrics.games.toLocaleString();$('model-name').textContent=d.model.name;$('model-base').textContent=d.model.base;$('model-k').textContent=d.model.k;$('model-home').textContent=`${d.model.home_advantage} Elo`;$('promotion-rule').textContent=d.model.promotion_rule;drawCalibration(d.calibration)}
+async function loadDiagnostics(){
+  if(diagnosticsLoaded)return;
+  const [d,surface]=await Promise.all([json('/api/diagnostics'),json('/api/model/elo-surface')]);
+  diagnosticsLoaded=true;
+  $('md-brier').textContent=d.metrics.brier.toFixed(3);
+  $('md-logloss').textContent=d.metrics.log_loss.toFixed(3);
+  $('md-accuracy').textContent=pct(d.metrics.accuracy);
+  $('md-games').textContent=d.metrics.games.toLocaleString();
+  $('model-name').textContent=d.model.name;
+  $('model-base').textContent=d.model.base;
+  $('model-k').textContent=d.model.k;
+  $('model-home').textContent=`${d.model.home_advantage} Elo`;
+  $('promotion-rule').textContent=d.model.promotion_rule;
+  drawCalibration(d.calibration);
+  drawEloSurface(surface);
+}
+
+function drawEloSurface(d){
+  const ks=[...new Set(d.candidates.map(function(row){return Number(row.k)}))].sort(function(a,b){return a-b});
+  const homes=[...new Set(d.candidates.map(function(row){return Number(row.home_advantage)}))].sort(function(a,b){return a-b});
+  const by=new Map(d.candidates.map(function(row){return [row.k+'|'+row.home_advantage,row]}));
+  const values=d.candidates.map(function(row){return row.validation.brier});
+  const min=Math.min.apply(null,values),max=Math.max.apply(null,values),span=Math.max(1e-9,max-min);
+  const selected=d.selected_on_train,baseline=d.baseline,delta=selected.validation.brier-baseline.validation.brier;
+
+  $('elo-surface-status').textContent=d.train_games+' train · '+d.validation_games+' holdout · split '+d.split_date;
+  $('elo-split').textContent=d.train_games+' → '+d.validation_games;
+  $('elo-base-holdout').textContent=baseline.validation.brier.toFixed(3);
+  $('elo-selected').textContent='K'+selected.k.toFixed(0)+' / H'+selected.home_advantage.toFixed(0);
+  $('elo-holdout-delta').textContent=(delta>=0?'+':'')+delta.toFixed(4);
+  $('elo-holdout-delta').className=delta<0?'positive':delta>0?'negative':'';
+
+  const grid=$('elo-surface-grid');
+  grid.style.gridTemplateColumns='70px repeat('+homes.length+',minmax(78px,1fr))';
+  const cells=['<div class="elo-grid-cell axis">K ↓ / HOME →</div>'];
+  homes.forEach(function(home){cells.push('<div class="elo-grid-cell axis">'+home.toFixed(0)+'</div>')});
+  ks.forEach(function(k){
+    cells.push('<div class="elo-grid-cell axis">K '+k.toFixed(0)+'</div>');
+    homes.forEach(function(home){
+      const row=by.get(k+'|'+home);
+      const quality=1-(row.validation.brier-min)/span;
+      const alpha=(.05+.34*quality).toFixed(3);
+      const baselineCell=k===Number(baseline.k)&&home===Number(baseline.home_advantage);
+      const selectedCell=k===Number(selected.k)&&home===Number(selected.home_advantage);
+      cells.push('<div class="elo-grid-cell value '+(baselineCell?'baseline ':'')+(selectedCell?'selected':'')+'" style="background:rgba(129,214,190,'+alpha+')">'
+        +'<strong>'+row.validation.brier.toFixed(3)+'</strong>'
+        +'<span>train '+row.train.brier.toFixed(3)+'</span>'
+        +'<title>K '+k+' · home '+home+' · train Brier '+row.train.brier.toFixed(4)+' · holdout Brier '+row.validation.brier.toFixed(4)+'</title>'
+        +'</div>');
+    });
+  });
+  grid.innerHTML=cells.join('');
+
+  const verdict=$('elo-surface-verdict');
+  if(delta<0){
+    verdict.innerHTML='<strong>Train-selected candidate improves this holdout by <span class="positive">'+Math.abs(delta).toFixed(4)+' Brier</span>.</strong> That earns a follow-up experiment, not automatic promotion.';
+  }else if(delta>0){
+    verdict.innerHTML='<strong>The deployed baseline beats the train-selected candidate on this holdout by <span class="positive">'+Math.abs(delta).toFixed(4)+' Brier</span>.</strong> The frozen baseline survives this parameter search.';
+  }else{
+    verdict.innerHTML='<strong>The train-selected candidate ties the deployed baseline on this holdout.</strong> There is no evidence here to change the deployed parameters.';
+  }
+}
+
 function drawCalibration(points){const el=$('calibration-chart'),W=600,H=250,pad=34;const x=v=>pad+(W-2*pad)*v,y=v=>H-pad-(H-2*pad)*v;const path=points.map((p,i)=>`${i?'L':'M'}${x(p.mean_prediction)},${y(p.actual_rate)}`).join(' ');el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="grid" x1="${pad}" y1="${y(.5)}" x2="${W-pad}" y2="${y(.5)}"/><line class="grid" x1="${x(.5)}" y1="${pad}" x2="${x(.5)}" y2="${H-pad}"/><line class="ideal" x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}"/><path class="cal-line" d="${path}"/>${points.map(p=>`<circle class="point win" cx="${x(p.mean_prediction)}" cy="${y(p.actual_rate)}" r="${Math.max(4,Math.min(9,Math.sqrt(p.count)))}"><title>${(p.mean_prediction*100).toFixed(1)}% predicted · ${(p.actual_rate*100).toFixed(1)}% observed · n=${p.count}</title></circle>`).join('')}<text x="${pad}" y="${H-6}">0%</text><text x="${W-pad-18}" y="${H-6}">100%</text><text x="4" y="${pad+3}">100%</text><text x="4" y="${H-pad+3}">0%</text></svg>`}
 
 
