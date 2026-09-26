@@ -56,7 +56,7 @@ This does not model a real replacement rotation, role redistribution, fatigue, o
 
 ### Player-for-player trade
 
-A trade swaps the modeled RAPM contribution of two players across their teams for the remaining schedule at a stated minutes assumption.
+A trade swaps the modeled RAPM contribution of two players across their teams at a stated minutes assumption. The resulting team-strength adjustment is persistent: it affects every remaining regular-season game **and** postseason series in the simulated world.
 
 The current trade model does **not** include salary, fit, usage, role changes, chemistry, positional constraints, bench effects, or nonlinear lineup interactions. It is a controlled player-impact scenario, not a trade-value oracle.
 
@@ -65,6 +65,12 @@ A player cannot simultaneously be traded and absent in one scenario yet because 
 ### Lineup estimates
 
 Lineup Lab combines an additive RAPM prior with observed lineup net rating using possession-weighted shrinkage. An unseen lineup falls back to the prior. It does not invent a chemistry term.
+
+### One concrete future
+
+Scenario Lab can sample one deterministic future from the same model state. A world seed fixes the remaining regular-season draws, play-in, playoff series, and champion.
+
+This is one draw from the model distribution, not a “most likely bracket” and not an additional forecast. Rerolling the seed samples another internally consistent path.
 
 ### Game Replay
 
