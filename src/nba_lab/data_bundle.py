@@ -273,3 +273,66 @@ def bundle_summary(path: str | Path = "data/nba_lab_bundle_manifest.json") -> di
         "selection": manifest.get("selection") or {},
         "manifest_path": str(path),
     }
+
+
+def verify_bundle_manifest(
+    path: str | Path = "data/nba_lab_bundle_manifest.json",
+) -> dict:
+    """Verify manifest-tracked bundle artifacts by SHA-256."""
+    manifest = load_bundle_manifest(path)
+    if manifest is None:
+        return {
+            "valid": False,
+            "manifest": str(path),
+            "error": "bundle manifest not found",
+            "artifacts": [],
+        }
+
+    tracked = [
+        ("schedule", manifest.get("schedule") or {}),
+        ("awards", manifest.get("awards") or {}),
+    ]
+    for row in manifest.get("replays") or []:
+        if row.get("status") == "ok":
+            tracked.append((f"replay:{row.get('game_id')}", row))
+    impact = manifest.get("impact") or {}
+    if impact.get("status") == "ok":
+        tracked.append(("impact", impact))
+
+    reports = []
+    for name, artifact in tracked:
+        artifact_path = artifact.get("path")
+        expected = artifact.get("sha256")
+        if not artifact_path or not expected:
+            reports.append({
+                "name": name,
+                "path": artifact_path,
+                "status": "manifest_missing_hash",
+            })
+            continue
+        target = Path(artifact_path)
+        if not target.exists():
+            reports.append({
+                "name": name,
+                "path": str(target),
+                "status": "missing",
+                "expected_sha256": expected,
+            })
+            continue
+        content = target.read_bytes()
+        actual = sha256(content).hexdigest()
+        reports.append({
+            "name": name,
+            "path": str(target),
+            "status": "ok" if actual == expected else "hash_mismatch",
+            "expected_sha256": expected,
+            "actual_sha256": actual,
+            "bytes": len(content),
+        })
+
+    return {
+        "valid": bool(reports) and all(row["status"] == "ok" for row in reports),
+        "manifest": str(path),
+        "season": manifest["season"],
+        "artifacts": reports,
+    }
