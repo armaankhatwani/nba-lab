@@ -348,3 +348,39 @@ def test_home_page_contains_all_live_lab_views():
         'matchup-result',
     ):
         assert f'id="{element_id}"' in html
+
+
+def test_scenario_matchup_uses_exact_affected_game_adjustment():
+    scenario = client.post('/api/scenario/player-absence', json={
+        'as_of': '2026-01-15',
+        'trials': 150,
+        'seed': 61,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 4,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    }).json()
+    game = scenario['affected_games'][0]
+    r = client.post('/api/scenario/matchup', json={
+        'as_of': '2026-01-15',
+        'trials': 500,
+        'seed': 61,
+        'alpha': 1000,
+        'game_id': game['game_id'],
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 4,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert 'BOS' in data['rating_adjustments']
+    if data['game']['home_team'] == 'BOS':
+        assert data['scenario']['team_a_rating'] < data['baseline']['team_a_rating']
+    else:
+        assert data['scenario']['team_b_rating'] < data['baseline']['team_b_rating']
