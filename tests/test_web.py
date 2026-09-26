@@ -574,3 +574,12 @@ def test_scenario_matchup_flags_when_game_is_already_forced():
     data = r.json()
     assert data['forced_winner'] == game['away_team']
     assert 0 <= data['scenario']['team_a_series_probability'] <= 1
+
+
+def test_upcoming_games_are_point_in_time_schedule_only():
+    rows = client.get('/api/upcoming-games?as_of=2026-01-15&limit=5')
+    assert rows.status_code == 200
+    data = rows.json()
+    assert len(data) == 5
+    assert all(row['date'] >= '2026-01-15' for row in data)
+    assert all({'game_id','date','home_team','away_team'} <= set(row) for row in data)
