@@ -495,7 +495,7 @@ def _first_future_game(as_of="2026-01-15"):
 
 def test_future_result_only_scenario_is_valid():
     game = _first_future_game()
-    r = client.post('/api/scenario/player-absence', json={
+    r = client.post('/api/scenario/run', json={
         'as_of': '2026-01-15',
         'trials': 160,
         'seed': 101,
