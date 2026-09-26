@@ -71,6 +71,49 @@
       </section>
 
 
+      <section class="view" id="view-matchup">
+        <div class="panel matchup-controls">
+          <span class="eyebrow">MATCHUP LAB / FROZEN TEAM STATE</span>
+          <h2>Simulate the matchup.</h2>
+          <div class="matchup-inputs">
+            <label>Team A<select id="matchup-a"></select></label>
+            <div class="versus">VS</div>
+            <label>Team B<select id="matchup-b"></select></label>
+            <label>As-of date<input id="matchup-date" type="date" value="2026-01-15"></label>
+            <label>Series<select id="matchup-bestof"><option value="1">Single game</option><option value="3">Best of 3</option><option value="5">Best of 5</option><option value="7" selected>Best of 7</option></select></label>
+            <label>Trials<select id="matchup-trials"><option>1000</option><option selected>5000</option><option>10000</option><option>25000</option></select></label>
+            <button class="primary matchup-run" id="matchup-run">RUN MATCHUP ↗</button>
+          </div>
+        </div>
+        <div class="panel matchup-result" id="matchup-result">
+          <div class="matchup-side">
+            <span id="matchup-a-name">TEAM A</span>
+            <strong id="matchup-a-prob">—</strong>
+            <small id="matchup-a-elo">Elo —</small>
+          </div>
+          <div class="matchup-center">
+            <span>SERIES / GAME PROBABILITY</span>
+            <div class="prob-track"><div id="matchup-prob-fill"></div></div>
+            <strong id="matchup-games">Run a matchup</strong>
+          </div>
+          <div class="matchup-side right">
+            <span id="matchup-b-name">TEAM B</span>
+            <strong id="matchup-b-prob">—</strong>
+            <small id="matchup-b-elo">Elo —</small>
+          </div>
+        </div>
+        <div class="matchup-detail-grid">
+          <div class="panel distribution-panel">
+            <div class="section-head"><div><span class="eyebrow">SERIES LENGTH</span><h2>How long does it go?</h2></div></div>
+            <div id="length-dist" class="distribution-bars"></div>
+          </div>
+          <div class="panel distribution-panel">
+            <div class="section-head"><div><span class="eyebrow">FINAL SERIES SCORE</span><h2>Most common outcomes</h2></div></div>
+            <div id="score-dist" class="score-list"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="view" id="view-scenario">
         <div class="scenario-toolbar panel">
           <div><span class="eyebrow">SCENARIO LAB / COMPOSABLE WORLD</span><h2>Change the world. Re-run the league.</h2><p>Compose historical branches, player absences, and RAPM-backed trades. One scenario then propagates through season outcomes and award futures.</p></div>
