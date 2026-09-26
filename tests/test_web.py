@@ -505,3 +505,99 @@ def test_lineup_optimizer_supports_historical_cutoff():
     data = r.json()
     assert data['as_of'] == '2025-12-01'
     assert data['lineups']
+
+
+def _first_future_game(as_of="2026-01-15"):
+    rows = client.get(f'/api/upcoming-games?as_of={as_of}&limit=1').json()
+    assert rows
+    return rows[0]
+
+
+def test_upcoming_games_are_point_in_time_schedule_only():
+    rows = client.get('/api/upcoming-games?as_of=2026-01-15&limit=5')
+    assert rows.status_code == 200
+    data = rows.json()
+    assert len(data) == 5
+    assert all(row['date'] >= '2026-01-15' for row in data)
+    assert all({'game_id','date','home_team','away_team'} <= set(row) for row in data)
+
+
+def test_future_result_only_scenario_is_valid():
+    game = _first_future_game()
+    r = client.post('/api/scenario/run', json={
+        'as_of': '2026-01-15',
+        'trials': 160,
+        'seed': 101,
+        'alpha': 1000,
+        'future_results': [{
+            'game_id': game['game_id'],
+            'winner': game['away_team']
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data['future_results']) == 1
+    assert data['future_results'][0]['forced_winner'] == game['away_team']
+    assert any(abs(row['expected_wins_delta']) > 0 for row in data['deltas'])
+
+
+def test_scenario_sensitivity_preserves_forced_future_result():
+    game = _first_future_game()
+    r = client.post('/api/scenario/sensitivity?sensitivity_trials=120', json={
+        'as_of': '2026-01-15',
+        'trials': 120,
+        'seed': 102,
+        'alpha': 1000,
+        'future_results': [{
+            'game_id': game['game_id'],
+            'winner': game['home_team']
+        }],
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 2,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data['point']['trials'] == 120
+    assert data['impact_lower']['trials'] == 120
+    assert data['impact_upper']['trials'] == 120
+
+
+def test_scenario_leverage_excludes_fixed_future_game():
+    game = _first_future_game()
+    r = client.post('/api/scenario/leverage?leverage_trials=100&limit=5', json={
+        'as_of': '2026-01-15',
+        'trials': 100,
+        'seed': 103,
+        'alpha': 1000,
+        'future_results': [{
+            'game_id': game['game_id'],
+            'winner': game['home_team']
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data['rows']
+    assert all(row['game_id'] != game['game_id'] for row in data['rows'])
+
+
+def test_scenario_matchup_flags_when_game_is_already_forced():
+    game = _first_future_game()
+    r = client.post('/api/scenario/matchup', json={
+        'as_of': '2026-01-15',
+        'trials': 120,
+        'seed': 104,
+        'alpha': 1000,
+        'game_id': game['game_id'],
+        'future_results': [{
+            'game_id': game['game_id'],
+            'winner': game['away_team']
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data['forced_winner'] == game['away_team']
+    assert 0 <= data['scenario']['team_a_series_probability'] <= 1
