@@ -43,3 +43,17 @@ def test_zero_margin_weight_reduces_to_plain_elo_updates():
         plain.rating_delta(game, 1500, 1500, p, 1.0)
         - score.rating_delta(game, 1500, 1500, p, 1.0)
     ) < 1e-12
+
+
+def test_fit_as_of_uses_one_entering_rating_state_per_date():
+    games = [
+        Game("1", date(2026, 1, 1), "A", "B", 120, 90),
+        Game("2", date(2026, 1, 1), "A", "C", 100, 99),
+    ]
+    model = EloModel(k=20, home_advantage=0)
+    ratings = model.fit_as_of(games, date(2026, 1, 2))
+
+    # Both games begin from 1500, so each A win contributes +10 Elo.
+    assert abs(ratings["A"] - 1520) < 1e-12
+    assert abs(ratings["B"] - 1490) < 1e-12
+    assert abs(ratings["C"] - 1490) < 1e-12
