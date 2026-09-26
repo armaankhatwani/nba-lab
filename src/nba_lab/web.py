@@ -1081,6 +1081,8 @@ def scenario_lineups(
             "team": team,
             "baseline_candidate_players": len(base_candidates),
             "scenario_candidate_players": len(scenario_candidates),
+            "baseline_roster": list(base_candidates),
+            "scenario_roster": list(scenario_candidates),
             "baseline_top_score": (
                 base_top.blended_net_rating if base_top else None
             ),
