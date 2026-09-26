@@ -1,7 +1,7 @@
 from nba_lab.impact import fit_rapm
 from nba_lab.impact_source import ImpactPlayer, ImpactSnapshot
 from nba_lab.impact import Stint
-from nba_lab.lineup import compare_lineups, estimate_lineup, optimize_lineups
+from nba_lab.lineup import compare_lineups, estimate_lineup, most_observed_lineup, optimize_lineups
 
 
 def snapshot():
@@ -75,3 +75,11 @@ def test_lineup_uncertainty_uses_full_rapm_covariance():
         for b in players
     )
     assert abs(result.rapm_standard_error**2 - max(0.0, variance)) < 1e-9
+
+
+def test_most_observed_lineup_prefers_empirical_unit():
+    s = snapshot()
+    rapm = fit_rapm(list(s.stints), alpha=100)
+    row = most_observed_lineup(s, rapm, "A", prior_possessions=100)
+    assert row.players == ("1","2","3","4","5")
+    assert row.observed_possessions == 100
