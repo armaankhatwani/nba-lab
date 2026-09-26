@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,replayLastResult=null,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null,pendingScenarioFlipGameId=null;
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayTimelineData=null,replayIndex=0,replayLastResult=null,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null,pendingScenarioFlipGameId=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
@@ -96,13 +96,19 @@ async function loadReplay(){
 }
 async function loadReplayGame(){
   const gameId=$('replay-game').value;if(!gameId)return;
-  replayData=await json(`/api/replay/${gameId}`);
+  $('replay-timeline-status').textContent='loading trace…';
+  const [game,timeline]=await Promise.all([
+    json(`/api/replay/${gameId}`),
+    json(`/api/replay/${gameId}/timeline?limit=8`)
+  ]);
+  replayData=game;replayTimelineData=timeline;
   const events=replayData.events||[];
   replayIndex=Math.max(0,Math.min(events.length-1,Math.floor(events.length*.72)));
   $('replay-slider').min=0;$('replay-slider').max=Math.max(0,events.length-1);$('replay-slider').value=replayIndex;
   $('replay-away-team').textContent=replayData.game.away_team;$('replay-home-team').textContent=replayData.game.home_team;
   $('replay-edit-home-label').textContent=replayData.game.home_team;$('replay-edit-away-label').textContent=replayData.game.away_team;
   $('replay-home-delta').value=0;$('replay-away-delta').value=0;
+  renderReplayTimeline();
   renderReplayEvent();
 }
 function replayClock(seconds){
