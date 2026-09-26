@@ -1207,7 +1207,7 @@ function renderScenario(d){
 function renderScenarioSchedule(d){
   const rows=d.affected_games||[];
   const target=$('scenario-schedule');
-  $('scenario-schedule-status').textContent=rows.length?rows.length+' affected games':'no future strength-adjusted games';
+  $('scenario-schedule-status').textContent=rows.length?rows.length+' affected games':'no future affected games';
   if(!rows.length){
     target.classList.add('empty');
     target.innerHTML='<span>No future game receives a player/trade strength adjustment. Forced results, if any, are shown in the intervention summary above.</span>';
@@ -1218,12 +1218,13 @@ function renderScenarioSchedule(d){
     const deltas=[];
     if(Math.abs(g.away_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.away_team+' '+(g.away_elo_delta>=0?'+':'')+g.away_elo_delta.toFixed(0)+' Elo</span>');
     if(Math.abs(g.home_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.home_team+' '+(g.home_elo_delta>=0?'+':'')+g.home_elo_delta.toFixed(0)+' Elo</span>');
+    if(g.forced_winner)deltas.push('<span class="scenario-game-delta scenario-game-forced">FORCED '+g.forced_winner+' WIN</span>');
     const delta=g.home_win_probability_delta;
     return '<div class="scenario-game-row" data-scenario-game="'+g.game_id+'" title="Open this affected game in Matchup Lab">'
       +'<div class="scenario-game-date">'+g.date+'</div>'
       +'<div class="scenario-game-matchup"><strong>'+g.away_team+' @ '+g.home_team+'</strong><span>'+pct(g.baseline_home_win_probability)+' → '+pct(g.altered_home_win_probability)+' home win</span></div>'
       +'<div class="scenario-game-deltas">'+deltas.join('')+'</div>'
-      +'<div class="scenario-game-prob"><strong class="'+(delta>=0?'positive':'negative')+'">'+(delta>=0?'+':'')+(100*delta).toFixed(1)+' pts</strong><span>home-win shift</span></div>'
+      +'<div class="scenario-game-prob"><strong class="'+(delta>=0?'positive':'negative')+'">'+(delta>=0?'+':'')+(100*delta).toFixed(1)+' pts</strong><span>'+(g.forced_winner?'model shift · result fixed':'home-win shift')+'</span></div>'
       +'</div>';
   }).join('');
   document.querySelectorAll('[data-scenario-game]').forEach(function(row){
