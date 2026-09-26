@@ -388,3 +388,25 @@ def test_scenario_matchup_uses_exact_affected_game_adjustment():
     else:
         assert data['scenario']['team_b_rating'] < data['baseline']['team_b_rating']
 
+
+
+def test_scenario_sensitivity_reports_direction_stability_summary():
+    r = client.post('/api/scenario/sensitivity?sensitivity_trials=160', json={
+        'as_of': '2026-01-15',
+        'trials': 160,
+        'seed': 81,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 3,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    bos = next(row for row in data['team_sensitivity'] if row['team'] == 'BOS')
+    assert len(bos['expected_wins_deltas']) == 3
+    assert bos['expected_wins_range'][0] <= bos['expected_wins_range'][1]
+    assert isinstance(bos['expected_wins_direction_stable'], bool)
+    assert isinstance(bos['championship_direction_stable'], bool)
