@@ -580,3 +580,14 @@ def test_scenario_lineups_apply_trade_and_absence_to_selected_game():
     assert bos[1]['player_id'] not in roster_ids
     assert bos_side['lineups']
     assert len(bos_side['lineups'][0]['players']) == 5
+
+
+def test_model_family_endpoint_exposes_holdout_gate():
+    r = client.get('/api/model/families')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['baseline']['family'] == 'deployed_elo'
+    assert data['tuned_plain']['family'] == 'tuned_plain_elo'
+    assert data['score_aware']['family'] == 'score_aware_elo'
+    assert data['validation_games'] > 0
+    assert data['score_aware_vs_baseline']['games'] == data['validation_games']
