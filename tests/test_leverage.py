@@ -19,3 +19,27 @@ def test_upcoming_games_are_ranked_and_limited():
     rows = rank_upcoming_games(games, date(2026, 1, 15), trials=100, seed=4, limit=5)
     assert len(rows) == 5
     assert rows[0].title_distribution_shift >= rows[-1].title_distribution_shift
+
+
+def test_game_specific_strength_adjustments_can_change_leverage():
+    games = synthetic_demo_games()
+    as_of = date(2026, 1, 15)
+    game = next(g for g in games if g.game_date >= as_of)
+    baseline = evaluate_game_leverage(games, game, as_of, trials=250, seed=12)
+    adjusted = evaluate_game_leverage(
+        games,
+        game,
+        as_of,
+        trials=250,
+        seed=12,
+        game_rating_adjustments={
+            future.game_id: {game.home_team: 140.0}
+            for future in games
+            if future.game_date >= as_of
+        },
+    )
+    assert adjusted.title_distribution_shift >= 0
+    assert (
+        abs(adjusted.title_distribution_shift - baseline.title_distribution_shift) > 1e-9
+        or abs(adjusted.playoff_distribution_shift - baseline.playoff_distribution_shift) > 1e-9
+    )
