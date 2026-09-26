@@ -345,7 +345,54 @@ async function loadScenarioPlayers(){
     const p=scenarioPlayers.find(function(x){return x.player_id===a.player_id});
     return Object.assign({},a,{impact_per_100:p?p.impact_per_100:a.impact_per_100});
   });
+  renderScenarioTradeOptions();
 }
+
+function renderScenarioTradeOptions(){
+  const aSelect=$('scenario-trade-a'),bSelect=$('scenario-trade-b');
+  const prevA=aSelect.value,prevB=bSelect.value;
+  const options=scenarioPlayers.map(function(p){
+    return '<option value="'+p.player_id+'">'+p.player_name+' · '+p.team+' · '+(p.impact_per_100>=0?'+':'')+p.impact_per_100.toFixed(2)+'</option>';
+  }).join('');
+  aSelect.innerHTML=options;bSelect.innerHTML=options;
+  if(scenarioPlayers.some(function(p){return p.player_id===prevA}))aSelect.value=prevA;
+  else if(selectedImpactPlayerId&&scenarioPlayers.some(function(p){return p.player_id===selectedImpactPlayerId}))aSelect.value=selectedImpactPlayerId;
+  if(scenarioPlayers.some(function(p){return p.player_id===prevB}))bSelect.value=prevB;
+  if(!bSelect.value||bSelect.value===aSelect.value||sameScenarioTradeTeam()){
+    const a=scenarioPlayers.find(function(p){return p.player_id===aSelect.value});
+    const other=scenarioPlayers.find(function(p){return p.player_id!==aSelect.value&&(!a||p.team!==a.team)});
+    if(other)bSelect.value=other.player_id;
+  }
+}
+function sameScenarioTradeTeam(){
+  const a=scenarioPlayers.find(function(p){return p.player_id===$('scenario-trade-a').value});
+  const b=scenarioPlayers.find(function(p){return p.player_id===$('scenario-trade-b').value});
+  return !!(a&&b&&a.team===b.team);
+}
+$('scenario-trade-enabled').onchange=function(){
+  $('scenario-trade-fields').hidden=!this.checked;
+  updateScenarioCountPreview();
+};
+$('scenario-trade-a').onchange=function(){
+  if(this.value===$('scenario-trade-b').value||sameScenarioTradeTeam()){
+    const a=scenarioPlayers.find(function(p){return p.player_id===this.value});
+    const other=scenarioPlayers.find(function(p){return p.player_id!==this.value&&(!a||p.team!==a.team)});
+    if(other)$('scenario-trade-b').value=other.player_id;
+  }
+};
+$('scenario-trade-b').onchange=function(){
+  if(this.value===$('scenario-trade-a').value||sameScenarioTradeTeam()){
+    const b=scenarioPlayers.find(function(p){return p.player_id===this.value});
+    const other=scenarioPlayers.find(function(p){return p.player_id!==this.value&&(!b||p.team!==b.team});
+    if(other)$('scenario-trade-a').value=other.player_id;
+  }
+};
+function updateScenarioCountPreview(){
+  const count=scenarioAbsences.length+($('scenario-flip-game').value?1:0)+($('scenario-trade-enabled').checked?1:0);
+  $('scenario-count').textContent=count;
+}
+$('scenario-flip-game').onchange=updateScenarioCountPreview;
+
 function addScenarioAbsence(playerId){
   if(scenarioAbsences.length>=3)return;
   let available=scenarioPlayers.find(function(p){return p.player_id===playerId&&!scenarioAbsences.some(function(a){return a.player_id===p.player_id})});
@@ -355,7 +402,7 @@ function addScenarioAbsence(playerId){
   renderScenarioAbsences();
 }
 function renderScenarioAbsences(){
-  $('scenario-count').textContent=scenarioAbsences.length;
+  updateScenarioCountPreview();
   $('scenario-add').disabled=scenarioAbsences.length>=3;
   $('scenario-absence-list').innerHTML=scenarioAbsences.map(function(a,i){
     const options=scenarioPlayers.map(function(p){
@@ -398,13 +445,24 @@ $('scenario-run').onclick=async function(){
   try{
     const ids=scenarioAbsences.map(function(a){return a.player_id});
     if(new Set(ids).size!==ids.length)throw Error('Each player can appear only once in a scenario.');
-    if(!scenarioAbsences.length)throw Error('Add at least one player absence.');
+    const tradeEnabled=$('scenario-trade-enabled').checked;
+    const hasFlip=!!$('scenario-flip-game').value;
+    if(!scenarioAbsences.length&&!tradeEnabled&&!hasFlip)throw Error('Add at least one scenario intervention.');
+    if(tradeEnabled){
+      if($('scenario-trade-a').value===$('scenario-trade-b').value)throw Error('Trade players must be different.');
+      if(sameScenarioTradeTeam())throw Error('Trade players must come from different teams.');
+    }
     const body={
       as_of:$('scenario-date').value,
       trials:Number($('scenario-trials').value),
       seed:2026,
       alpha:Number($('scenario-alpha').value),
       flipped_game_ids:$('scenario-flip-game').value?[$('scenario-flip-game').value]:[],
+      trades:tradeEnabled?[{
+        player_a_id:$('scenario-trade-a').value,
+        player_b_id:$('scenario-trade-b').value,
+        minutes_per_game:Number($('scenario-trade-minutes').value)
+      }]:[],
       absences:scenarioAbsences.map(function(a){return {
         player_id:a.player_id,
         games_missed:Number(a.games_missed),
@@ -421,7 +479,7 @@ $('scenario-run').onclick=async function(){
 function renderScenario(d){
   const deltas=d.deltas||[];
   const altered=Object.fromEntries(d.altered.teams.map(function(x){return [x.team,x]}));
-  $('scenario-count').textContent=d.player_absences.length;$('scenario-sims').textContent=d.trials.toLocaleString();
+  $('scenario-count').textContent=(d.player_absences||[]).length+(d.historical_flips||[]).length+(d.trades||[]).length;$('scenario-sims').textContent=d.trials.toLocaleString();
   const biggestWin=[].concat(deltas).sort(function(a,b){return Math.abs(b.expected_wins_delta)-Math.abs(a.expected_wins_delta)})[0];
   const biggestTitle=[].concat(deltas).sort(function(a,b){return Math.abs(b.championship_probability_delta)-Math.abs(a.championship_probability_delta)})[0];
   $('scenario-win-swing').textContent=biggestWin?(biggestWin.team+' '+signed(biggestWin.expected_wins_delta)):'—';
@@ -435,7 +493,13 @@ function renderScenario(d){
       +'<strong>'+(e.margin_delta_per_game>=0?'+':'')+e.margin_delta_per_game.toFixed(2)+' pts/game → '+(e.elo_delta_per_game>=0?'+':'')+e.elo_delta_per_game.toFixed(0)+' Elo</strong>'
       +'<small>RAPM '+(e.impact_per_100>=0?'+':'')+e.impact_per_100.toFixed(2)+' → replacement '+(e.replacement_impact_per_100>=0?'+':'')+e.replacement_impact_per_100.toFixed(2)+' · '+e.minutes_per_game.toFixed(0)+' MPG · '+e.affected_game_ids.length+' scheduled games affected</small></div>';
   });
-  $('scenario-effects').innerHTML=historyCards.concat(absenceCards).join('');
+  const tradeCards=(d.trades||[]).map(function(e){
+    return '<div class="scenario-effect"><span>TRADE · '+e.team_a+' ⇄ '+e.team_b+'</span>'
+      +'<strong>'+e.player_a_name+' ⇄ '+e.player_b_name+'</strong>'
+      +'<small>'+e.team_a+': '+(e.team_a_margin_delta_per_game>=0?'+':'')+e.team_a_margin_delta_per_game.toFixed(2)+' pts/game · '+(e.team_a_elo_delta_per_game>=0?'+':'')+e.team_a_elo_delta_per_game.toFixed(0)+' Elo · '+e.team_a_affected_games.length+' games<br>'
+      +e.team_b+': '+(e.team_b_margin_delta_per_game>=0?'+':'')+e.team_b_margin_delta_per_game.toFixed(2)+' pts/game · '+(e.team_b_elo_delta_per_game>=0?'+':'')+e.team_b_elo_delta_per_game.toFixed(0)+' Elo · '+e.team_b_affected_games.length+' games</small></div>';
+  });
+  $('scenario-effects').innerHTML=historyCards.concat(tradeCards,absenceCards).join('');
   renderScenarioAwardRipple(d);
   renderScenarioBars();
   $('scenario-rows').innerHTML=d.baseline.teams.map(function(x){
