@@ -601,3 +601,16 @@ def test_scenario_matchup_flags_when_game_is_already_forced():
     data = r.json()
     assert data['forced_winner'] == game['away_team']
     assert 0 <= data['scenario']['team_a_series_probability'] <= 1
+
+
+def test_model_elo_surface_keeps_selection_and_holdout_separate():
+    r = client.get('/api/model/elo-surface')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['train_games'] > 0
+    assert data['validation_games'] > 0
+    assert len(data['candidates']) == 36
+    assert data['baseline']['k'] == 20
+    assert data['baseline']['home_advantage'] == 65
+    best_train = min(row['train']['brier'] for row in data['candidates'])
+    assert abs(data['selected_on_train']['train']['brier'] - best_train) < 1e-12
