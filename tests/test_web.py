@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from nba_lab.web import app
+from nba_lab.web import GAMES, app
 
 client = TestClient(app)
 
@@ -704,8 +704,7 @@ def test_scenario_world_returns_complete_playoff_path():
 
 
 def test_scenario_world_honors_forced_result():
-    games = client.get('/api/games?before=2026-02-01&limit=100').json()
-    # Use Scenario schedule discovery indirectly through the synthetic season dates.
+    # Use the same in-memory schedule as the API fixture.
     target = next(
         game for game in GAMES
         if game.game_date.isoformat() >= '2026-01-15'
