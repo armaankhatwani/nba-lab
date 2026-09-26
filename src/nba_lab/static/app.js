@@ -575,11 +575,15 @@ $('scenario-future-game').onchange=renderScenarioFutureWinners;
 $('scenario-date').onchange=async function(){
   await loadScenarioHistory();
   await loadScenarioFutureGames();
+  await loadScenarioPlayers();
+  renderScenarioAbsences();
   updateScenarioCountPreview();
 };
 async function loadScenarioPlayers(){
   const alpha=Number($('scenario-alpha').value||1000);
-  const d=await json('/api/impact?alpha='+alpha+'&limit=500');
+  const q=new URLSearchParams({alpha:String(alpha),limit:'500'});
+  if($('scenario-date').value)q.set('as_of',$('scenario-date').value);
+  const d=await json('/api/impact?'+q);
   scenarioPlayers=d.players||[];
   scenarioAbsences=scenarioAbsences.map(function(a){
     const p=scenarioPlayers.find(function(x){return x.player_id===a.player_id});
