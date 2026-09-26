@@ -150,3 +150,28 @@ def test_game_replay_endpoints_and_intervention():
     assert abs(data['expected_final_margin_delta'] - 3) < 1e-9
     assert 'season_ripple' in data
     assert data['season_ripple']['teams']
+
+
+def test_player_absence_scenario_api():
+    players = client.get('/api/impact?alpha=1000&limit=50').json()['players']
+    player = next(row for row in players if row['impact_per_100'] > 0)
+    r = client.post('/api/scenario/player-absence', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 12,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': player['player_id'],
+            'games_missed': 8,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    effect = data['player_absences'][0]
+    team = effect['team']
+    delta = next(row for row in data['deltas'] if row['team'] == team)
+    assert effect['affected_game_ids']
+    assert effect['elo_delta_per_game'] < 0
+    assert delta['expected_wins_delta'] < 0
