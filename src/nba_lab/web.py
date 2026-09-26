@@ -444,10 +444,14 @@ def matchup(request: MatchupRequest):
 
 
 @app.get("/api/impact")
-def impact(alpha: float = 1000.0, limit: int = 100):
+def impact(alpha: float = 1000.0, limit: int = 100, as_of: date | None = None):
     if alpha <= 0 or alpha > 10000:
         raise HTTPException(422, "alpha must be in (0, 10000]")
-    result = _impact_result(float(alpha))
+    try:
+        snapshot = IMPACT_SNAPSHOT if as_of is None else _impact_snapshot_as_of(as_of)
+        result = _impact_result(float(alpha), as_of)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     rows = []
     for player in result.players[: max(1, min(limit, 500))]:
         meta = IMPACT_SNAPSHOT.players.get(player.player_id)
@@ -461,26 +465,35 @@ def impact(alpha: float = 1000.0, limit: int = 100):
         "alpha": result.alpha,
         "home_court_per_100": result.home_court_per_100,
         "weighted_rmse": result.weighted_rmse,
-        "stints": len(IMPACT_SNAPSHOT.stints),
-        "games": len({stint.game_id for stint in IMPACT_SNAPSHOT.stints}),
-        "qa": IMPACT_SNAPSHOT.qa,
+        "as_of": as_of.isoformat() if as_of else None,
+        "stints": len(snapshot.stints),
+        "games": len({stint.game_id for stint in snapshot.stints}),
+        "qa": snapshot.qa,
         "players": rows,
         "warning": "RAPM is a regularized association estimate, not a causal player-value truth.",
     }
 
 
 @app.get("/api/impact/{player_id}/path")
-def impact_path(player_id: str):
+def impact_path(player_id: str, as_of: date | None = None):
     if player_id not in IMPACT_SNAPSHOT.players:
         raise HTTPException(404, f"Unknown impact player: {player_id}")
     points = []
     for alpha in (100.0, 300.0, 1000.0, 3000.0):
-        result = _impact_result(alpha)
+        try:
+            result = _impact_result(alpha, as_of)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         row = next((player for player in result.players if player.player_id == player_id), None)
         if row is not None:
             points.append({"alpha": alpha, "impact_per_100": row.impact_per_100, "rank": row.rank})
     meta = IMPACT_SNAPSHOT.players[player_id]
-    return {"player": asdict(meta), "points": points, "source": IMPACT_SOURCE}
+    return {
+        "player": asdict(meta),
+        "points": points,
+        "source": IMPACT_SOURCE,
+        "as_of": as_of.isoformat() if as_of else None,
+    }
 
 
 @app.get("/api/lineup/players")
