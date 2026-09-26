@@ -11,6 +11,7 @@
     <nav>
       <button class="nav-item active" data-view="home"><span>⌂</span>Overview</button>
       <button class="nav-item" data-view="season"><span>↗</span>Season Lab</button>
+      <button class="nav-item" data-view="scenario"><span>◇</span>Scenario Lab</button>
       <button class="nav-item" data-view="timeline"><span>⌁</span>Timeline Lab</button>
       <button class="nav-item" data-view="model"><span>◎</span>Model Lab</button>
       <div class="nav-section">MORE LABS</div>
@@ -28,9 +29,10 @@
 
     <main class="content">
       <section class="view active" id="view-home">
-        <div class="hero-copy"><p>One host for season simulation, counterfactuals, awards, player impact, lineups, schedule leverage, and historical game replay.</p></div>
+        <div class="hero-copy"><p>One host for season simulation, composable counterfactual worlds, awards, player impact, lineups, schedule leverage, and historical game replay.</p></div>
         <div class="lab-grid">
           <article class="lab-card featured" data-open="season"><span class="card-num">01</span><div><span class="status live">LIVE</span><h2>Season Lab</h2><p>Freeze any date, branch history, and simulate the remaining season through the Finals.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card featured" data-open="scenario"><span class="card-num">10</span><div><span class="status live">LIVE</span><h2>Scenario Lab</h2><p>Compose player-availability shocks from RAPM and measure the league-wide downstream consequences.</p></div><div class="card-arrow">↗</div></article>
           <article class="lab-card" data-open="matchup"><span class="card-num">02</span><div><span class="status live">LIVE</span><h2>Matchup Lab</h2><p>Freeze team strength at any date and simulate a single game or playoff series.</p></div><div class="card-arrow">↗</div></article>
           <article class="lab-card" data-open="timeline"><span class="card-num">03</span><div><span class="status live">LIVE</span><h2>Timeline Lab</h2><p>Replay a team's season as an evolving rating and record instead of a final snapshot.</p></div><div class="card-arrow">↗</div></article>
           <article class="lab-card" data-open="model"><span class="card-num">04</span><div><span class="status live">LIVE</span><h2>Model Lab</h2><p>Inspect calibration, backtests, assumptions, and promotion gates for deployed models.</p></div><div class="card-arrow">↗</div></article>
@@ -63,6 +65,28 @@
             <div class="panel ripple-panel"><div class="section-head"><div><span class="eyebrow">RIPPLE MAP</span><h2>Who gains and loses?</h2></div><label class="mini-select">Metric<select id="ripple-metric"><option value="expected_wins_delta">Expected wins</option><option value="playoffs_probability_delta">Playoff odds</option><option value="championship_probability_delta">Title odds</option><option value="first_seed_probability_delta">No. 1 seed</option></select></label></div><div id="ripple-bars" class="ripple-bars empty"><span>Run a branch to reveal league-wide effects.</span></div></div>
             <div class="panel cross-lab-panel" id="award-ripple-panel" hidden><div class="section-head"><div><span class="eyebrow">CROSS-LAB EFFECT / MVP</span><h2>How does this history branch move the award race?</h2></div><button class="ghost-button" id="open-awards-from-season">OPEN AWARDS LAB ↗</button></div><div id="season-award-ripple" class="season-award-ripple"></div></div>
             <div class="panel table-panel"><div class="section-head"><div><span class="eyebrow">LEAGUE DISTRIBUTION</span><h2>Expected wins & postseason paths</h2></div></div><div class="scroll"><table><thead><tr><th>Team</th><th>Record now</th><th>Expected wins</th><th>80% range</th><th>No. 1</th><th>Top 6</th><th>Play-in</th><th>Playoffs</th><th>Title</th><th>Δ wins</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="view" id="view-scenario">
+        <div class="scenario-toolbar panel">
+          <div><span class="eyebrow">SCENARIO LAB / COMPOSABLE WORLD</span><h2>Change availability. Re-run the league.</h2><p>Player impact is translated into game-specific team strength only for the games each player misses. Multiple absences can coexist in the same alternate world.</p></div>
+          <div class="scenario-top-controls"><label>As-of<input id="scenario-date" type="date" value="2026-01-15"></label><label>Trials<select id="scenario-trials"><option>1000</option><option selected>5000</option><option>10000</option><option>25000</option></select></label><label>Ridge α<select id="scenario-alpha"><option value="100">100</option><option value="300">300</option><option value="1000" selected>1000</option><option value="3000">3000</option></select></label></div>
+        </div>
+        <div class="scenario-layout">
+          <aside class="panel scenario-builder">
+            <div class="section-head"><div><span class="eyebrow">INTERVENTIONS</span><h2>Player availability</h2></div><button class="ghost-button" id="scenario-add">+ ADD PLAYER</button></div>
+            <div id="scenario-absence-list" class="scenario-absence-list"></div>
+            <button class="primary scenario-run" id="scenario-run">RUN ALTERNATE WORLD <span>↗</span></button>
+            <p class="note">The replacement RAPM is explicit. A value of 0 means replacement-level in this model; negative values model a weaker replacement.</p>
+          </aside>
+          <div class="scenario-main">
+            <div class="metric-grid"><article class="panel metric"><span>ABSENCES</span><strong id="scenario-count">0</strong><small>composed interventions</small></article><article class="panel metric"><span>BIGGEST WIN SWING</span><strong id="scenario-win-swing">—</strong><small>expected wins</small></article><article class="panel metric"><span>BIGGEST TITLE SWING</span><strong id="scenario-title-swing">—</strong><small>championship probability</small></article><article class="panel metric"><span>SIMULATIONS</span><strong id="scenario-sims">—</strong><small>paired futures</small></article></div>
+            <div class="panel scenario-summary"><div class="section-head"><div><span class="eyebrow">MODEL TRANSLATION</span><h2>What changed underneath?</h2></div><span>RAPM → expected margin → Elo-equivalent per affected game</span></div><div id="scenario-effects" class="scenario-effects empty"><span>Add a player absence to inspect the model translation.</span></div></div>
+            <div class="panel scenario-ripple"><div class="section-head"><div><span class="eyebrow">LEAGUE RIPPLE</span><h2>How does the alternate world spread?</h2></div><label class="mini-select">Metric<select id="scenario-metric"><option value="expected_wins_delta">Expected wins</option><option value="playoffs_probability_delta">Playoff odds</option><option value="championship_probability_delta">Title odds</option><option value="first_seed_probability_delta">No. 1 seed</option></select></label></div><div id="scenario-bars" class="scenario-bars empty"><span>Run the scenario to reveal league-wide effects.</span></div></div>
+            <div class="panel table-panel"><div class="section-head"><div><span class="eyebrow">BASELINE VS SCENARIO</span><h2>Season outcome distributions</h2></div></div><div class="scroll"><table><thead><tr><th>Team</th><th>Expected wins</th><th>Playoffs</th><th>Title</th><th>Δ wins</th><th>Δ playoffs</th><th>Δ title</th></tr></thead><tbody id="scenario-rows"></tbody></table></div></div>
           </div>
         </div>
       </section>
@@ -101,7 +125,7 @@
         <div class="metric-grid impact-metrics"><article class="panel metric"><span>STINTS</span><strong id="impact-stints">—</strong><small>regression observations</small></article><article class="panel metric"><span>GAMES</span><strong id="impact-games">—</strong><small>distinct games</small></article><article class="panel metric"><span>HOME COURT</span><strong id="impact-home">—</strong><small>points / 100</small></article><article class="panel metric"><span>WEIGHTED RMSE</span><strong id="impact-rmse">—</strong><small>stint net rating</small></article></div>
         <div class="impact-grid">
           <div class="panel impact-board"><div class="section-head"><div><span class="eyebrow">RAPM BOARD</span><h2>Regularized player value</h2></div><input id="impact-search" class="table-search" placeholder="Filter player / team"></div><div class="scroll impact-scroll"><table><thead><tr><th>Rank</th><th>Player</th><th>Team</th><th>RAPM / 100</th><th>Possessions</th></tr></thead><tbody id="impact-rows"></tbody></table></div></div>
-          <div class="panel impact-detail"><span class="eyebrow">REGULARIZATION STABILITY</span><h2 id="impact-detail-name">Select a player</h2><p id="impact-detail-meta">How much does the estimate survive stronger shrinkage?</p><div id="impact-path-chart" class="chart impact-path-chart"></div><div class="warning-box"><strong>INTERPRETATION</strong><span>RAPM adjusts for who shared the floor, but it remains an association estimate with large single-season uncertainty.</span></div></div>
+          <div class="panel impact-detail"><span class="eyebrow">REGULARIZATION STABILITY</span><h2 id="impact-detail-name">Select a player</h2><p id="impact-detail-meta">How much does the estimate survive stronger shrinkage?</p><div id="impact-path-chart" class="chart impact-path-chart"></div><button class="ghost-button impact-scenario-button" id="impact-to-scenario" disabled>SIMULATE PLAYER ABSENCE ↗</button><div class="warning-box"><strong>INTERPRETATION</strong><span>RAPM adjusts for who shared the floor, but it remains an association estimate with large single-season uncertainty.</span></div></div>
         </div>
         <div class="panel impact-scatter-panel"><div class="section-head"><div><span class="eyebrow">EXPOSURE VS ESTIMATE</span><h2>Impact becomes more trustworthy with minutes behind it.</h2></div><span>hover points for player context</span></div><div id="impact-scatter" class="chart impact-scatter"></div></div>
       </section>
