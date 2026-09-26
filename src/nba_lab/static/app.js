@@ -442,42 +442,81 @@ $('impact-to-scenario').onclick=function(){
   }
   openView('scenario');
 };
+
+function buildScenarioRequest(){
+  const tradeEnabled=$('scenario-trade-enabled').checked;
+  return {
+    as_of:$('scenario-date').value,
+    trials:Number($('scenario-trials').value),
+    seed:2026,
+    alpha:Number($('scenario-alpha').value),
+    flipped_game_ids:$('scenario-flip-game').value?[$('scenario-flip-game').value]:[],
+    trades:tradeEnabled?[{
+      player_a_id:$('scenario-trade-a').value,
+      player_b_id:$('scenario-trade-b').value,
+      minutes_per_game:Number($('scenario-trade-minutes').value)
+    }]:[],
+    absences:scenarioAbsences.map(function(a){return {
+      player_id:a.player_id,
+      games_missed:Number(a.games_missed),
+      minutes_per_game:Number(a.minutes_per_game),
+      replacement_impact_per_100:Number(a.replacement_impact_per_100)
+    }})
+  };
+}
+function validateScenarioRequest(body){
+  const ids=body.absences.map(function(a){return a.player_id});
+  if(new Set(ids).size!==ids.length)throw Error('Each player can appear only once in a scenario.');
+  if(!body.absences.length&&!body.trades.length&&!body.flipped_game_ids.length)throw Error('Add at least one scenario intervention.');
+  if(body.trades.length){
+    const trade=body.trades[0];
+    if(trade.player_a_id===trade.player_b_id)throw Error('Trade players must be different.');
+    if(sameScenarioTradeTeam())throw Error('Trade players must come from different teams.');
+    if(ids.includes(trade.player_a_id)||ids.includes(trade.player_b_id))throw Error('A traded player cannot also be absent in the same scenario yet.');
+  }
+}
 $('scenario-run').onclick=async function(){
   const button=$('scenario-run');button.disabled=true;
   try{
-    const ids=scenarioAbsences.map(function(a){return a.player_id});
-    if(new Set(ids).size!==ids.length)throw Error('Each player can appear only once in a scenario.');
-    const tradeEnabled=$('scenario-trade-enabled').checked;
-    const hasFlip=!!$('scenario-flip-game').value;
-    if(!scenarioAbsences.length&&!tradeEnabled&&!hasFlip)throw Error('Add at least one scenario intervention.');
-    if(tradeEnabled){
-      if($('scenario-trade-a').value===$('scenario-trade-b').value)throw Error('Trade players must be different.');
-      if(sameScenarioTradeTeam())throw Error('Trade players must come from different teams.');
-    }
-    const body={
-      as_of:$('scenario-date').value,
-      trials:Number($('scenario-trials').value),
-      seed:2026,
-      alpha:Number($('scenario-alpha').value),
-      flipped_game_ids:$('scenario-flip-game').value?[$('scenario-flip-game').value]:[],
-      trades:tradeEnabled?[{
-        player_a_id:$('scenario-trade-a').value,
-        player_b_id:$('scenario-trade-b').value,
-        minutes_per_game:Number($('scenario-trade-minutes').value)
-      }]:[],
-      absences:scenarioAbsences.map(function(a){return {
-        player_id:a.player_id,
-        games_missed:Number(a.games_missed),
-        minutes_per_game:Number(a.minutes_per_game),
-        replacement_impact_per_100:Number(a.replacement_impact_per_100)
-      }})
-    };
+    const body=buildScenarioRequest();validateScenarioRequest(body);
     const d=await json('/api/scenario/player-absence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     scenarioLast=d;renderScenario(d);
   }catch(e){
     $('scenario-effects').classList.add('empty');$('scenario-effects').innerHTML='<span>'+e.message+'</span>';
   }finally{button.disabled=false}
 };
+$('scenario-awards-run').onclick=async function(){
+  const button=$('scenario-awards-run');button.disabled=true;
+  const target=$('scenario-award-future-bars');
+  target.classList.add('empty');target.innerHTML='<span>Simulating award futures in both worlds…</span>';
+  try{
+    const body=buildScenarioRequest();validateScenarioRequest(body);
+    const trials=Number($('scenario-award-trials').value);
+    const d=await json('/api/scenario/awards?award_trials='+trials,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    renderScenarioAwardFuture(d);
+  }catch(e){
+    target.classList.add('empty');target.innerHTML='<span>'+e.message+'</span>';
+  }finally{button.disabled=false}
+};
+function renderScenarioAwardFuture(d){
+  const target=$('scenario-award-future-bars');
+  const rows=(d.deltas||[]).slice(0,10);
+  if(!rows.length){target.classList.add('empty');target.innerHTML='<span>No overlapping award candidates for this scenario.</span>';return}
+  const max=Math.max.apply(null,rows.map(function(x){return Math.abs(x.leader_probability_delta)}).concat([.001]));
+  target.classList.remove('empty');
+  target.innerHTML=rows.map(function(row){
+    const delta=row.leader_probability_delta;
+    const width=50*Math.abs(delta)/max;
+    const teamText=row.baseline_team===row.altered_team?row.altered_team:(row.baseline_team+' → '+row.altered_team);
+    return '<div class="scenario-award-future-row">'
+      +'<div class="player"><strong>'+row.player_name+'</strong><span>'+teamText+'</span></div>'
+      +'<div class="scenario-award-shift-track"><span class="scenario-award-shift-zero"></span><span class="scenario-award-shift-fill '+(delta>=0?'pos':'neg')+'" style="width:'+width+'%"></span></div>'
+      +'<strong>'+pct(row.baseline_leader_probability)+' → '+pct(row.altered_leader_probability)+'</strong>'
+      +'<small class="'+(delta>=0?'positive':'negative')+'">'+(delta>=0?'+':'')+(100*delta).toFixed(1)+' pts</small>'
+      +'</div>';
+  }).join('');
+}
+
 function renderScenario(d){
   const deltas=d.deltas||[];
   const altered=Object.fromEntries(d.altered.teams.map(function(x){return [x.team,x]}));
