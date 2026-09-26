@@ -637,12 +637,8 @@ function renderScenarioSensitivity(d){
   const point=Object.fromEntries(d.point.teams.map(function(x){return [x.team,x]}));
   const low=Object.fromEntries(d.impact_lower.teams.map(function(x){return [x.team,x]}));
   const high=Object.fromEntries(d.impact_upper.teams.map(function(x){return [x.team,x]}));
-  const teams=Object.keys(point).sort(function(a,b){
-    const pa=point[a],pb=point[b],ba=baseline[a],bb=baseline[b];
-    const scoreA=Math.abs(pa.expected_wins-ba.expected_wins)+8*Math.abs(pa.championship_probability-ba.championship_probability);
-    const scoreB=Math.abs(pb.expected_wins-bb.expected_wins)+8*Math.abs(pb.championship_probability-bb.championship_probability);
-    return scoreB-scoreA;
-  }).slice(0,8);
+  const summaries=(d.team_sensitivity||[]).slice(0,8);
+  const teams=summaries.length?summaries.map(function(row){return row.team}):Object.keys(point).slice(0,8);
   const changed=teams.some(function(team){
     return Math.abs(low[team].expected_wins-high[team].expected_wins)>.001
       || Math.abs(low[team].championship_probability-high[team].championship_probability)>.0001;
@@ -652,12 +648,18 @@ function renderScenarioSensitivity(d){
     target.innerHTML='<span>This scenario has no player-impact uncertainty component; the lower, point, and upper worlds are identical.</span>';
     return;
   }
+  const summaryBy=Object.fromEntries(summaries.map(function(row){return [row.team,row]}));
   target.classList.remove('empty');
   target.innerHTML=teams.map(function(team){
+    const s=summaryBy[team];
+    const stable=!s||(s.expected_wins_direction_stable&&s.championship_direction_stable);
+    const badge=stable?'STABLE':'FRAGILE';
+    const winsRange=s?s.expected_wins_range:null;
+    const titleRange=s?s.championship_probability_range:null;
     return '<div class="sensitivity-row">'
-      +'<div class="sensitivity-team"><strong>'+team+'</strong><span>signal low → point → high</span></div>'
-      +'<div class="sensitivity-metric"><span>EXPECTED WINS</span><div class="sensitivity-triplet"><strong class="low">'+low[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="point">'+point[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="high">'+high[team].expected_wins.toFixed(1)+'</strong></div></div>'
-      +'<div class="sensitivity-metric"><span>TITLE ODDS</span><div class="sensitivity-triplet"><strong class="low">'+pct(low[team].championship_probability)+'</strong><i>→</i><strong class="point">'+pct(point[team].championship_probability)+'</strong><i>→</i><strong class="high">'+pct(high[team].championship_probability)+'</strong></div></div>'
+      +'<div class="sensitivity-team"><strong>'+team+'</strong><span>signal low → point → high</span><em class="sensitivity-badge '+(stable?'stable':'fragile')+'">'+badge+'</em></div>'
+      +'<div class="sensitivity-metric"><span>EXPECTED WINS</span><div class="sensitivity-triplet"><strong class="low">'+low[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="point">'+point[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="high">'+high[team].expected_wins.toFixed(1)+'</strong></div>'+(winsRange?'<small>Δ range '+signed(winsRange[0])+' to '+signed(winsRange[1])+'</small>':'')+'</div>'
+      +'<div class="sensitivity-metric"><span>TITLE ODDS</span><div class="sensitivity-triplet"><strong class="low">'+pct(low[team].championship_probability)+'</strong><i>→</i><strong class="point">'+pct(point[team].championship_probability)+'</strong><i>→</i><strong class="high">'+pct(high[team].championship_probability)+'</strong></div>'+(titleRange?'<small>Δ range '+(titleRange[0]>=0?'+':'')+(100*titleRange[0]).toFixed(2)+' to '+(titleRange[1]>=0?'+':'')+(100*titleRange[1]).toFixed(2)+' pts</small>':'')+'</div>'
       +'</div>';
   }).join('');
 }
