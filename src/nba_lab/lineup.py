@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import combinations
+from math import sqrt
 
 from .impact import RapmResult, Stint
 from .impact_source import ImpactSnapshot
@@ -11,10 +13,15 @@ from .impact_source import ImpactSnapshot
 class LineupEstimate:
     players: tuple[str, ...]
     additive_rapm: float
+    rapm_standard_error: float
+    rapm_lower_80: float
+    rapm_upper_80: float
     observed_possessions: float
     observed_net_rating: float | None
     blended_net_rating: float
     observed_weight: float
+    blended_lower_80: float
+    blended_upper_80: float
 
 
 @dataclass(frozen=True)
@@ -36,11 +43,13 @@ def _lineup_observations(stints: tuple[Stint, ...]):
     return totals
 
 
-def estimate_lineup(
+def _estimate_lineup_from_context(
     snapshot: ImpactSnapshot,
     rapm: RapmResult,
+    rapm_by_id: dict[str, object],
+    observations,
     players: tuple[str, ...],
-    prior_possessions: float = 300.0,
+    prior_possessions: float,
 ) -> LineupEstimate:
     if len(players) != 5 or len(set(players)) != 5:
         raise ValueError("a lineup must contain exactly five unique players")
@@ -49,25 +58,108 @@ def estimate_lineup(
         raise ValueError(f"unknown player ids: {sorted(unknown)}")
     if prior_possessions <= 0:
         raise ValueError("prior_possessions must be positive")
+    missing = set(players) - set(rapm_by_id)
+    if missing:
+        raise ValueError(f"players missing RAPM estimates: {sorted(missing)}")
 
-    impacts = {player.player_id: player.impact_per_100 for player in rapm.players}
-    additive = sum(impacts[player] for player in players)
-
-    observations = _lineup_observations(snapshot.stints)
     key = tuple(sorted(players))
+    rows = [rapm_by_id[player] for player in key]
+    additive = sum(row.impact_per_100 for row in rows)
+    covariance_index = {
+        player_id: i
+        for i, player_id in enumerate(rapm.player_order)
+    }
+    selected = [covariance_index[player] for player in key]
+    variance = sum(
+        rapm.player_covariance[i][j]
+        for i in selected
+        for j in selected
+    )
+    standard_error = sqrt(max(0.0, variance))
+    z80 = 1.2815515655446004
+    lower = additive - z80 * standard_error
+    upper = additive + z80 * standard_error
+
     possessions, point_diff = observations.get(key, (0.0, 0.0))
     observed = 100.0 * point_diff / possessions if possessions else None
     weight = possessions / (possessions + prior_possessions) if possessions else 0.0
     blended = additive if observed is None else (1.0 - weight) * additive + weight * observed
 
+    # Diagnostic sensitivity band: only the RAPM prior component varies.
+    # Empirical lineup uncertainty is not estimated here.
+    blended_lower = blended - (1.0 - weight) * (additive - lower)
+    blended_upper = blended + (1.0 - weight) * (upper - additive)
+
     return LineupEstimate(
         players=key,
         additive_rapm=additive,
+        rapm_standard_error=standard_error,
+        rapm_lower_80=lower,
+        rapm_upper_80=upper,
         observed_possessions=possessions,
         observed_net_rating=observed,
         blended_net_rating=blended,
         observed_weight=weight,
+        blended_lower_80=blended_lower,
+        blended_upper_80=blended_upper,
     )
+
+
+def estimate_lineup(
+    snapshot: ImpactSnapshot,
+    rapm: RapmResult,
+    players: tuple[str, ...],
+    prior_possessions: float = 300.0,
+) -> LineupEstimate:
+    rapm_by_id = {player.player_id: player for player in rapm.players}
+    observations = _lineup_observations(snapshot.stints)
+    return _estimate_lineup_from_context(
+        snapshot,
+        rapm,
+        rapm_by_id,
+        observations,
+        players,
+        prior_possessions,
+    )
+
+
+def optimize_lineups(
+    snapshot: ImpactSnapshot,
+    rapm: RapmResult,
+    candidate_players: tuple[str, ...],
+    prior_possessions: float = 300.0,
+    top_k: int = 10,
+) -> tuple[LineupEstimate, ...]:
+    unique = tuple(dict.fromkeys(candidate_players))
+    if len(unique) < 5:
+        raise ValueError("lineup optimization requires at least five players")
+    if len(unique) > 20:
+        raise ValueError("lineup optimization is limited to 20 players")
+    if top_k < 1:
+        raise ValueError("top_k must be positive")
+
+    rapm_by_id = {player.player_id: player for player in rapm.players}
+    observations = _lineup_observations(snapshot.stints)
+    rows = [
+        _estimate_lineup_from_context(
+            snapshot,
+            rapm,
+            rapm_by_id,
+            observations,
+            tuple(group),
+            prior_possessions,
+        )
+        for group in combinations(unique, 5)
+    ]
+    rows.sort(
+        key=lambda row: (
+            -row.blended_net_rating,
+            -row.blended_lower_80,
+            -row.observed_possessions,
+            row.players,
+        )
+    )
+    return tuple(rows[:top_k])
 
 
 def compare_lineups(
