@@ -55,3 +55,25 @@ def test_player_absence_changes_team_distribution_with_paired_worlds():
     delta = {row.team: row for row in result.deltas}[team]
     assert delta.expected_wins_delta < 0
     assert result.player_absences[0].affected_game_ids
+
+
+def test_historical_flip_and_absence_compose_in_one_world():
+    games = synthetic_demo_games()
+    snapshot = synthetic_impact_snapshot()
+    rapm = fit_rapm(list(snapshot.stints), alpha=1000)
+    as_of = date(2026, 1, 15)
+    prior = next(game for game in reversed(games) if game.game_date < as_of and game.is_final)
+    player = max(rapm.players, key=lambda row: row.impact_per_100)
+    result = simulate_scenario(
+        games,
+        as_of,
+        snapshot,
+        rapm,
+        [PlayerAbsence(player.player_id, games_missed=6, minutes_per_game=36)],
+        flipped_game_ids=[prior.game_id],
+        trials=300,
+        seed=11,
+    )
+    assert len(result.historical_flips) == 1
+    assert result.historical_flips[0].original_winner != result.historical_flips[0].flipped_winner
+    assert result.player_absences[0].affected_game_ids
