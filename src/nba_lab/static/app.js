@@ -296,6 +296,24 @@ function setLineupScenarioContext(team,asOf){
   $('lineup-context').hidden=false;
   $('lineup-context').innerHTML='<strong>SCENARIO ROSTER · '+team+'</strong><span>Loaded from Scenario Lab as of '+asOf+'. Team labels on Lineup A reflect the altered roster, not the original snapshot metadata.</span>';
 }
+function setLineupScenarioGameContext(d){
+  const teamByPlayer={};
+  const allowed=[];
+  (d.teams||[]).forEach(function(side){
+    (side.roster?.player_meta||[]).forEach(function(player){
+      teamByPlayer[player.player_id]=side.team;
+      allowed.push(player.player_id);
+    });
+  });
+  lineupScenarioContext={
+    as_of:d.as_of,
+    game:d.game,
+    team_by_player:teamByPlayer,
+    allowed_player_ids:[...new Set(allowed)]
+  };
+  $('lineup-context').hidden=false;
+  $('lineup-context').innerHTML='<strong>SCENARIO GAME ROSTERS · '+d.game.away_team+' @ '+d.game.home_team+' · '+d.game.date+'</strong><span>Trade swaps and game-specific absences are applied. Player pool is restricted to the two altered rosters for this matchup.</span>';
+}
 
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
@@ -327,22 +345,29 @@ function renderLineupSlots(){
       const pid=players[i];
       const p=lineupPool.find(x=>x.player_id===pid);
       if(!p)return `<div class="lineup-slot empty"><strong>OPEN SLOT</strong><span>player ${i+1}</span></div>`;
-      return `<div class="lineup-slot"><button data-remove-side="${side}" data-remove-player="${pid}">×</button><strong>${p.player_name}</strong><span>${p.team} · ${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(1)}</span></div>`;
+      const displayTeam=(lineupScenarioContext?.team_by_player||{})[pid]||p.team;
+      return `<div class="lineup-slot"><button data-remove-side="${side}" data-remove-player="${pid}">×</button><strong>${p.player_name}</strong><span>${displayTeam} · ${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(1)}</span></div>`;
     }).join('');
   }
   document.querySelectorAll('[data-remove-player]').forEach(button=>button.onclick=()=>{
     const arr=button.dataset.removeSide==='a'?lineupA:lineupB;
     const idx=arr.indexOf(button.dataset.removePlayer);if(idx>=0)arr.splice(idx,1);
-    clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool();
+    resetLineupResult();renderLineupSlots();renderLineupPool();
   });
 }
 function renderLineupPool(){
   const q=($('lineup-search').value||'').toLowerCase().trim();
   const team=$('lineup-team-filter').value;
   const used=new Set([...lineupA,...lineupB]);
-  const rows=lineupPool.filter(p=>(!q||p.player_name.toLowerCase().includes(q)||p.team.toLowerCase().includes(q))&&(!team||p.team===team));
+  const allowed=lineupScenarioContext?.allowed_player_ids?new Set(lineupScenarioContext.allowed_player_ids):null;
+  const rows=lineupPool.filter(function(p){
+    const displayTeam=(lineupScenarioContext?.team_by_player||{})[p.player_id]||p.team;
+    return (!allowed||allowed.has(p.player_id))
+      &&(!q||p.player_name.toLowerCase().includes(q)||displayTeam.toLowerCase().includes(q))
+      &&(!team||displayTeam===team);
+  });
   $('lineup-player-pool').innerHTML=rows.map(p=>`<div class="pool-player ${used.has(p.player_id)?'used':''}">
-    <div><strong>${p.player_name}</strong><span>${p.team} · RAPM ${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(2)} · ${Math.round(p.possessions).toLocaleString()} poss</span></div>
+    <div><strong>${p.player_name}</strong><span>${((lineupScenarioContext?.team_by_player||{})[p.player_id]||p.team)} · RAPM ${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(2)} · ${Math.round(p.possessions).toLocaleString()} poss</span></div>
     <div class="pool-actions"><button data-add-a="${p.player_id}" title="Add to lineup A">A</button><button data-add-b="${p.player_id}" title="Add to lineup B">B</button></div>
   </div>`).join('');
   document.querySelectorAll('[data-add-a]').forEach(b=>b.onclick=()=>addLineupPlayer('a',b.dataset.addA));
@@ -352,7 +377,7 @@ function addLineupPlayer(side,pid){
   if(lineupA.includes(pid)||lineupB.includes(pid))return;
   const arr=side==='a'?lineupA:lineupB;
   if(arr.length>=5)return;
-  arr.push(pid);clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool();
+  arr.push(pid);resetLineupResult();renderLineupSlots();renderLineupPool();
 }
 function resetLineupResult(){
   $('lineup-a-value').textContent='—';$('lineup-b-value').textContent='—';$('lineup-margin').textContent='—';
@@ -366,7 +391,7 @@ $('lineup-alpha').onchange=async()=>{clearLineupScenarioContext();await loadLine
 $('lineup-date').onchange=async()=>{clearLineupScenarioContext();await loadLineup();resetLineupResult();resetLineupOptimizer()};
 $('lineup-latest').onclick=async()=>{$('lineup-date').value='';clearLineupScenarioContext();await loadLineup();resetLineupResult();resetLineupOptimizer()};
 $('lineup-prior').onchange=()=>{resetLineupResult();resetLineupOptimizer()};
-$('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool()};
+$('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;resetLineupResult();renderLineupSlots();renderLineupPool()};
 $('lineup-run').onclick=async()=>{
   if(lineupA.length!==5||lineupB.length!==5){$('lineup-margin-note').textContent='both sides need five unique players';return}
   const button=$('lineup-run');button.disabled=true;
@@ -998,15 +1023,19 @@ function renderScenarioSchedule(d){
     if(Math.abs(g.away_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.away_team+' '+(g.away_elo_delta>=0?'+':'')+g.away_elo_delta.toFixed(0)+' Elo</span>');
     if(Math.abs(g.home_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.home_team+' '+(g.home_elo_delta>=0?'+':'')+g.home_elo_delta.toFixed(0)+' Elo</span>');
     const delta=g.home_win_probability_delta;
-    return '<div class="scenario-game-row" data-scenario-game="'+g.game_id+'" title="Open this affected game in Matchup Lab">'
+    return '<div class="scenario-game-row">'
       +'<div class="scenario-game-date">'+g.date+'</div>'
       +'<div class="scenario-game-matchup"><strong>'+g.away_team+' @ '+g.home_team+'</strong><span>'+pct(g.baseline_home_win_probability)+' → '+pct(g.altered_home_win_probability)+' home win</span></div>'
       +'<div class="scenario-game-deltas">'+deltas.join('')+'</div>'
       +'<div class="scenario-game-prob"><strong class="'+(delta>=0?'positive':'negative')+'">'+(delta>=0?'+':'')+(100*delta).toFixed(1)+' pts</strong><span>home-win shift</span></div>'
+      +'<div class="scenario-game-actions"><button data-scenario-matchup="'+g.game_id+'">MATCHUP ↗</button><button data-scenario-lineups="'+g.game_id+'">CLOSING 5 ↗</button></div>'
       +'</div>';
   }).join('');
-  document.querySelectorAll('[data-scenario-game]').forEach(function(row){
-    row.onclick=function(){openScenarioMatchup(row.dataset.scenarioGame)};
+  document.querySelectorAll('[data-scenario-matchup]').forEach(function(button){
+    button.onclick=function(){openScenarioMatchup(button.dataset.scenarioMatchup)};
+  });
+  document.querySelectorAll('[data-scenario-lineups]').forEach(function(button){
+    button.onclick=function(){openScenarioGameLineups(button.dataset.scenarioLineups)};
   });
 }
 
@@ -1032,6 +1061,40 @@ async function openScenarioMatchup(gameId){
     $('matchup-context').innerHTML='<div><strong>SCENARIO MATCHUP · '+d.game.away_team+' @ '+d.game.home_team+' · '+d.game.date+'</strong><span>'+(adjustments||'No direct player/trade adjustment')+' · same altered history, single-game comparison</span></div><div class="scenario-shift">'+pct(d.baseline.team_a_series_probability)+' → '+pct(d.scenario.team_a_series_probability)+' <small>home win</small></div>';
   }catch(e){
     setScenarioShareStatus('Could not open scenario matchup: '+e.message,true);
+  }
+}
+
+
+async function openScenarioGameLineups(gameId){
+  if(!scenarioLastRequest)return;
+  const body=Object.assign({},scenarioLastRequest,{
+    game_id:gameId,
+    prior_possessions:Number($('lineup-prior').value||300),
+    top_k:5
+  });
+  try{
+    const d=await json('/api/scenario/game-lineups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const home=d.teams.find(function(side){return side.team===d.game.home_team});
+    const away=d.teams.find(function(side){return side.team===d.game.away_team});
+    if(!home?.lineups?.length||!away?.lineups?.length)throw Error('No eligible five-man group for one side.');
+
+    $('lineup-date').value=d.as_of;
+    $('lineup-alpha').value=String(d.alpha);
+    $('lineup-prior').value=String(d.prior_possessions);
+    openView('lineup');
+    await loadLineup();
+
+    const available=new Set(lineupPool.map(function(p){return p.player_id}));
+    lineupA=home.lineups[0].players.filter(function(pid){return available.has(pid)});
+    lineupB=away.lineups[0].players.filter(function(pid){return available.has(pid)});
+    setLineupScenarioGameContext(d);
+    resetLineupResult();renderLineupSlots();renderLineupPool();
+
+    $('lineup-a-meta').innerHTML='<span class="lineup-seen">SCENARIO '+home.team+'</span> · top modeled closing group';
+    $('lineup-b-meta').innerHTML='<span class="lineup-seen">SCENARIO '+away.team+'</span> · top modeled closing group';
+    $('lineup-margin-note').textContent='Scenario closing fives loaded · compare when ready';
+  }catch(e){
+    setScenarioShareStatus('Could not open scenario closing fives: '+e.message,true);
   }
 }
 
