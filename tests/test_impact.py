@@ -43,3 +43,10 @@ def test_tune_alpha_returns_candidate():
 def test_bad_possessions_rejected():
     with pytest.raises(ValueError):
         fit_rapm([Stint("g",0,1,("A",),("B",))])
+
+
+def test_rapm_reports_finite_model_based_uncertainty():
+    result=fit_rapm(synthetic_stints(),alpha=100)
+    for player in result.players:
+        assert player.standard_error>=0
+        assert player.lower_80<=player.impact_per_100<=player.upper_80
