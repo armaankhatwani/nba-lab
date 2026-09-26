@@ -357,6 +357,8 @@ function clearScenarioResults(){
   $('scenario-bars').innerHTML='<span>Run the scenario to reveal league-wide effects.</span>';
   $('scenario-rows').innerHTML='';
   $('scenario-award-panel').hidden=true;
+  $('scenario-sensitivity-rows').classList.add('empty');
+  $('scenario-sensitivity-rows').innerHTML='<span>Run a scenario, then compare lower-signal, point, and upper-signal player-impact worlds.</span>';
   $('scenario-award-future-bars').classList.add('empty');
   $('scenario-award-future-bars').innerHTML='<span>Run an alternate world, then propagate it through the remaining MVP simulation.</span>';
 }
@@ -611,6 +613,51 @@ $('scenario-run').onclick=async function(){
     $('scenario-effects').classList.add('empty');$('scenario-effects').innerHTML='<span>'+e.message+'</span>';
   }finally{button.disabled=false}
 };
+
+$('scenario-sensitivity-run').onclick=async function(){
+  const button=$('scenario-sensitivity-run');button.disabled=true;
+  const target=$('scenario-sensitivity-rows');
+  target.classList.add('empty');target.innerHTML='<span>Running paired sensitivity worlds…</span>';
+  try{
+    const body=buildScenarioRequest();validateScenarioRequest(body);
+    const trials=Number($('scenario-sensitivity-trials').value);
+    const d=await json('/api/scenario/sensitivity?sensitivity_trials='+trials,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    renderScenarioSensitivity(d);
+  }catch(e){
+    target.classList.add('empty');target.innerHTML='<span>'+e.message+'</span>';
+  }finally{button.disabled=false}
+};
+function renderScenarioSensitivity(d){
+  const target=$('scenario-sensitivity-rows');
+  const baseline=Object.fromEntries(d.baseline.teams.map(function(x){return [x.team,x]}));
+  const point=Object.fromEntries(d.point.teams.map(function(x){return [x.team,x]}));
+  const low=Object.fromEntries(d.impact_lower.teams.map(function(x){return [x.team,x]}));
+  const high=Object.fromEntries(d.impact_upper.teams.map(function(x){return [x.team,x]}));
+  const teams=Object.keys(point).sort(function(a,b){
+    const pa=point[a],pb=point[b],ba=baseline[a],bb=baseline[b];
+    const scoreA=Math.abs(pa.expected_wins-ba.expected_wins)+8*Math.abs(pa.championship_probability-ba.championship_probability);
+    const scoreB=Math.abs(pb.expected_wins-bb.expected_wins)+8*Math.abs(pb.championship_probability-bb.championship_probability);
+    return scoreB-scoreA;
+  }).slice(0,8);
+  const changed=teams.some(function(team){
+    return Math.abs(low[team].expected_wins-high[team].expected_wins)>.001
+      || Math.abs(low[team].championship_probability-high[team].championship_probability)>.0001;
+  });
+  if(!changed){
+    target.classList.add('empty');
+    target.innerHTML='<span>This scenario has no player-impact uncertainty component; the lower, point, and upper worlds are identical.</span>';
+    return;
+  }
+  target.classList.remove('empty');
+  target.innerHTML=teams.map(function(team){
+    return '<div class="sensitivity-row">'
+      +'<div class="sensitivity-team"><strong>'+team+'</strong><span>signal low → point → high</span></div>'
+      +'<div class="sensitivity-metric"><span>EXPECTED WINS</span><div class="sensitivity-triplet"><strong class="low">'+low[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="point">'+point[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="high">'+high[team].expected_wins.toFixed(1)+'</strong></div></div>'
+      +'<div class="sensitivity-metric"><span>TITLE ODDS</span><div class="sensitivity-triplet"><strong class="low">'+pct(low[team].championship_probability)+'</strong><i>→</i><strong class="point">'+pct(point[team].championship_probability)+'</strong><i>→</i><strong class="high">'+pct(high[team].championship_probability)+'</strong></div></div>'
+      +'</div>';
+  }).join('');
+}
+
 $('scenario-awards-run').onclick=async function(){
   const button=$('scenario-awards-run');button.disabled=true;
   const target=$('scenario-award-future-bars');
