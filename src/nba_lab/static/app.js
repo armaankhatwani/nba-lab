@@ -237,6 +237,12 @@ async function loadLineup(){
   if($('lineup-team-filter').options.length<=1){
     teams.forEach(team=>{const o=document.createElement('option');o.value=team;o.textContent=team;$('lineup-team-filter').append(o)});
   }
+  const optTeam=$('lineup-opt-team');
+  const previousTeam=optTeam.value;
+  optTeam.replaceChildren();
+  teams.forEach(team=>{const o=document.createElement('option');o.value=team;o.textContent=team;optTeam.append(o)});
+  if(teams.includes(previousTeam))optTeam.value=previousTeam;
+  else if(teams.includes('BOS'))optTeam.value='BOS';
   renderLineupSlots();
   renderLineupPool();
 }
@@ -282,10 +288,10 @@ function resetLineupResult(){
 }
 $('lineup-search').oninput=renderLineupPool;
 $('lineup-team-filter').onchange=renderLineupPool;
-$('lineup-alpha').onchange=async()=>{await loadLineup();resetLineupResult()};
-$('lineup-date').onchange=async()=>{await loadLineup();resetLineupResult()};
-$('lineup-latest').onclick=async()=>{$('lineup-date').value='';await loadLineup();resetLineupResult()};
-$('lineup-prior').onchange=resetLineupResult;
+$('lineup-alpha').onchange=async()=>{await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-date').onchange=async()=>{await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-latest').onclick=async()=>{$('lineup-date').value='';await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-prior').onchange=()=>{resetLineupResult();resetLineupOptimizer()};
 $('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;resetLineupResult();renderLineupSlots();renderLineupPool()};
 $('lineup-run').onclick=async()=>{
   if(lineupA.length!==5||lineupB.length!==5){$('lineup-margin-note').textContent='both sides need five unique players';return}
@@ -307,6 +313,64 @@ $('lineup-run').onclick=async()=>{
     $('lineup-a-meta').innerHTML=meta(a);$('lineup-b-meta').innerHTML=meta(b);
   }catch(e){$('lineup-margin-note').textContent=e.message}finally{button.disabled=false}
 };
+
+
+function resetLineupOptimizer(){
+  $('lineup-opt-candidates').textContent='—';
+  $('lineup-opt-combos').textContent='—';
+  $('lineup-opt-best').textContent='—';
+  $('lineup-opt-evidence').textContent='—';
+  $('lineup-opt-results').classList.add('empty');
+  $('lineup-opt-results').innerHTML='<span>Choose a team and enumerate its modeled closing groups.</span>';
+}
+$('lineup-opt-run').onclick=async()=>{
+  const button=$('lineup-opt-run');button.disabled=true;
+  const target=$('lineup-opt-results');
+  target.classList.add('empty');target.innerHTML='<span>Enumerating five-man combinations…</span>';
+  try{
+    const q=new URLSearchParams({
+      team:$('lineup-opt-team').value,
+      alpha:String(Number($('lineup-alpha').value)),
+      prior_possessions:String(Number($('lineup-prior').value)),
+      top_k:String(Number($('lineup-opt-limit').value))
+    });
+    if($('lineup-date').value)q.set('as_of',$('lineup-date').value);
+    const d=await json('/api/lineup/optimize?'+q);
+    $('lineup-opt-candidates').textContent=d.candidate_players;
+    $('lineup-opt-combos').textContent=Number(d.combinations_evaluated).toLocaleString();
+    const top=d.lineups[0];
+    $('lineup-opt-best').textContent=top?(top.blended_net_rating>=0?'+':'')+top.blended_net_rating.toFixed(1):'—';
+    $('lineup-opt-evidence').textContent=top?Math.round(top.observed_possessions).toLocaleString():'—';
+    if(!d.lineups.length){
+      target.classList.add('empty');target.innerHTML='<span>No eligible five-man combinations for this snapshot.</span>';return;
+    }
+    target.classList.remove('empty');
+    target.innerHTML=d.lineups.map(function(row,i){
+      const names=row.player_meta.map(function(p){return p.player_name}).join(' · ');
+      const weight=Math.round(100*row.observed_weight);
+      return '<div class="lineup-opt-row">'
+        +'<div class="lineup-opt-rank">'+String(i+1).padStart(2,'0')+'</div>'
+        +'<div class="lineup-opt-players"><strong>'+names+'</strong><span>'+d.team+' · '+(row.observed_possessions>0?'observed unit':'unseen combination')+'</span></div>'
+        +'<div class="lineup-opt-stat"><span>MODEL NET</span><strong>'+(row.blended_net_rating>=0?'+':'')+row.blended_net_rating.toFixed(1)+'</strong></div>'
+        +'<div class="lineup-opt-band">'+(row.blended_lower_80>=0?'+':'')+row.blended_lower_80.toFixed(1)+' → '+(row.blended_upper_80>=0?'+':'')+row.blended_upper_80.toFixed(1)+'</div>'
+        +'<div class="lineup-opt-stat"><span>EVIDENCE</span><strong>'+Math.round(row.observed_possessions)+' poss · '+weight+'%</strong></div>'
+        +'<button data-load-opt-lineup="'+row.players.join(',')+'">LOAD A ↗</button>'
+        +'</div>';
+    }).join('');
+    document.querySelectorAll('[data-load-opt-lineup]').forEach(function(button){
+      button.onclick=function(){
+        lineupA=button.dataset.loadOptLineup.split(',');
+        lineupB=lineupB.filter(function(pid){return !lineupA.includes(pid)});
+        resetLineupResult();renderLineupSlots();renderLineupPool();
+        $('lineup-margin-note').textContent='optimized group loaded into Lineup A';
+      };
+    });
+  }catch(e){
+    target.classList.add('empty');target.innerHTML='<span>'+e.message+'</span>';
+  }finally{button.disabled=false}
+};
+$('lineup-opt-team').onchange=resetLineupOptimizer;
+$('lineup-opt-limit').onchange=resetLineupOptimizer;
 
 async function loadImpact(){
   const alpha=Number($('impact-alpha').value||1000);
