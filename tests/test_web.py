@@ -430,3 +430,27 @@ def test_impact_path_respects_historical_cutoff():
     data = r.json()
     assert data['as_of'] == '2025-12-01'
     assert data['points']
+
+
+def test_lineup_players_support_historical_cutoff():
+    full = client.get('/api/lineup/players?alpha=1000')
+    historical = client.get('/api/lineup/players?alpha=1000&as_of=2025-12-01')
+    assert full.status_code == 200
+    assert historical.status_code == 200
+    assert historical.json()['as_of'] == '2025-12-01'
+    assert historical.json()['players']
+
+
+def test_lineup_compare_uses_historical_impact_slice():
+    pool = client.get('/api/lineup/players?alpha=1000&as_of=2025-12-01').json()['players']
+    ids = [row['player_id'] for row in pool[:10]]
+    assert len(ids) == 10
+    r = client.post('/api/lineup/compare', json={
+        'lineup_a': ids[:5],
+        'lineup_b': ids[5:10],
+        'alpha': 1000,
+        'prior_possessions': 300,
+        'as_of': '2025-12-01'
+    })
+    assert r.status_code == 200
+    assert r.json()['as_of'] == '2025-12-01'
