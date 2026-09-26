@@ -41,6 +41,7 @@ class ReplaySimulation:
     seconds_remaining: float
     home_score_delta: int
     away_score_delta: int
+    future_margin_adjustment: float
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,7 @@ def simulate_from_event(
     seed: int = 2026,
     home_score_delta: int = 0,
     away_score_delta: int = 0,
+    future_margin_adjustment: float = 0.0,
     model: EloModel | None = None,
 ) -> ReplaySimulation:
     if trials < 1:
@@ -113,7 +115,7 @@ def simulate_from_event(
     if seconds <= 0 and current_margin == 0:
         fraction = 300.0 / 2880.0
 
-    mean_future_margin = pregame_margin * fraction
+    mean_future_margin = pregame_margin * fraction + future_margin_adjustment
     residual_sigma = sigma * sqrt(max(0.0, fraction))
     rng = random.Random(seed)
 
@@ -149,6 +151,7 @@ def simulate_from_event(
         seconds_remaining=seconds,
         home_score_delta=home_score_delta,
         away_score_delta=away_score_delta,
+        future_margin_adjustment=future_margin_adjustment,
     )
 
 
@@ -159,6 +162,7 @@ def compare_replay_intervention(
     seed: int = 2026,
     home_score_delta: int = 0,
     away_score_delta: int = 0,
+    future_margin_adjustment: float = 0.0,
 ) -> ReplayComparison:
     baseline = simulate_from_event(games, event, trials=trials, seed=seed)
     altered = simulate_from_event(
@@ -168,6 +172,7 @@ def compare_replay_intervention(
         seed=seed,
         home_score_delta=home_score_delta,
         away_score_delta=away_score_delta,
+        future_margin_adjustment=future_margin_adjustment,
     )
     return ReplayComparison(
         baseline=baseline,
