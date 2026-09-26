@@ -353,7 +353,10 @@ function scenarioShareSpec(){
   return {
     v:1,
     request:buildScenarioRequest(),
-    award_trials:Number($('scenario-award-trials').value||750)
+    award_trials:Number($('scenario-award-trials').value||750),
+    sensitivity_trials:Number($('scenario-sensitivity-trials').value||750),
+    leverage_trials:Number($('scenario-leverage-trials').value||500),
+    leverage_limit:Number($('scenario-leverage-limit').value||10)
   };
 }
 function setScenarioShareStatus(message,isError){
@@ -378,6 +381,8 @@ function clearScenarioResults(){
   $('scenario-schedule').innerHTML='<span>Affected future games will appear here with their combined strength and win-probability shifts.</span>';
   $('scenario-sensitivity-rows').classList.add('empty');
   $('scenario-sensitivity-rows').innerHTML='<span>Run a scenario, then compare lower-signal, point, and upper-signal player-impact worlds.</span>';
+  $('scenario-leverage-rows').classList.add('empty');
+  $('scenario-leverage-rows').innerHTML='<span>Run a scenario, then re-rank upcoming games inside that alternate world.</span>';
   $('scenario-award-future-bars').classList.add('empty');
   $('scenario-award-future-bars').innerHTML='<span>Run an alternate world, then propagate it through the remaining MVP simulation.</span>';
 }
@@ -388,6 +393,9 @@ async function applyScenarioShareSpec(spec){
   if(request.trials)$('scenario-trials').value=String(request.trials);
   if(request.alpha)$('scenario-alpha').value=String(request.alpha);
   if(spec.award_trials)$('scenario-award-trials').value=String(spec.award_trials);
+  if(spec.sensitivity_trials)$('scenario-sensitivity-trials').value=String(spec.sensitivity_trials);
+  if(spec.leverage_trials)$('scenario-leverage-trials').value=String(spec.leverage_trials);
+  if(spec.leverage_limit)$('scenario-leverage-limit').value=String(spec.leverage_limit);
   await loadScenarioPlayers();
   await loadScenarioHistory();
 
@@ -458,6 +466,9 @@ $('scenario-reset').onclick=async function(){
   $('scenario-trials').value='5000';
   $('scenario-alpha').value='1000';
   $('scenario-award-trials').value='750';
+  $('scenario-sensitivity-trials').value='750';
+  $('scenario-leverage-trials').value='500';
+  $('scenario-leverage-limit').value='10';
   await loadScenarioPlayers();
   await loadScenarioHistory();
   renderScenarioAbsences();
