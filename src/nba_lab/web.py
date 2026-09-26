@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from datetime import date, timedelta
 from functools import lru_cache
+from math import comb
 import os
 from pathlib import Path
 
@@ -579,7 +580,7 @@ def lineup_optimize(
         "combinations_evaluated": (
             0
             if len(candidates) < 5
-            else __import__("math").comb(len(candidates), 5)
+            else comb(len(candidates), 5)
         ),
         "lineups": [serialize(row) for row in rows],
         "warning": "Optimizer ranks the current snapshot roster under the RAPM-plus-observed-lineup model. It does not model roles, fatigue, matchup fit, or minute feasibility.",
