@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,selectedImpactPlayerId=null;
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
@@ -32,7 +32,7 @@ $('open-awards-from-season').onclick=()=>{
 
 function setupMatchup(){if(!$('matchup-a').value)$('matchup-a').value='NYK';if(!$('matchup-b').value)$('matchup-b').value='BOS'}
 $('matchup-run').onclick=runMatchup;
-async function runMatchup(){const button=$('matchup-run');button.disabled=true;try{const body={as_of:$('matchup-date').value,trials:Number($('matchup-trials').value),seed:2026,team_a:$('matchup-a').value,team_b:$('matchup-b').value,best_of:Number($('matchup-bestof').value)};const d=await json('/api/matchup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});renderMatchup(d)}catch(e){$('matchup-result').innerHTML=`<p>${e.message}</p>`}finally{button.disabled=false}}
+async function runMatchup(){const button=$('matchup-run');button.disabled=true;$('matchup-context').hidden=true;try{const body={as_of:$('matchup-date').value,trials:Number($('matchup-trials').value),seed:2026,team_a:$('matchup-a').value,team_b:$('matchup-b').value,best_of:Number($('matchup-bestof').value)};const d=await json('/api/matchup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});renderMatchup(d)}catch(e){$('matchup-result').innerHTML=`<p>${e.message}</p>`}finally{button.disabled=false}}
 function renderMatchup(d){const pa=d.team_a_series_probability,pb=d.team_b_series_probability;$('matchup-a-name').textContent=d.team_a;$('matchup-b-name').textContent=d.team_b;$('matchup-a-prob').textContent=pct(pa);$('matchup-b-prob').textContent=pct(pb);$('matchup-a-elo').textContent=`Elo ${d.team_a_rating.toFixed(0)}`;$('matchup-b-elo').textContent=`Elo ${d.team_b_rating.toFixed(0)}`;$('matchup-prob-fill').style.width=`${pa*100}%`;$('matchup-games').textContent=d.best_of===1?'single game':`${d.expected_games.toFixed(2)} expected games`;const lengths=Object.entries(d.length_distribution),maxL=Math.max(...lengths.map(([,v])=>v),.001);$('length-dist').innerHTML=lengths.map(([k,v])=>`<div class="dist-row"><span>${k} games</span><div class="dist-track"><div class="dist-fill" style="width:${100*v/maxL}%"></div></div><strong>${pct(v)}</strong></div>`).join('');const scores=Object.entries(d.score_distribution).sort((a,b)=>b[1]-a[1]).slice(0,8),maxS=Math.max(...scores.map(([,v])=>v),.001);$('score-dist').innerHTML=scores.map(([k,v])=>`<div class="score-row"><span>${k}</span><div class="score-track"><div class="score-fill" style="width:${100*v/maxS}%"></div></div><strong>${pct(v)}</strong></div>`).join('')}
 $('timeline-team').onchange=loadTimeline;
 async function loadTimeline(){const team=$('timeline-team').value||'NYK';const d=await json(`/api/timeline/${team}`);$('tl-record').textContent=`${d.summary.wins}-${d.summary.losses}`;$('tl-current').textContent=d.summary.current_rating.toFixed(0);$('tl-peak').textContent=d.summary.peak_rating.toFixed(0);$('tl-range').textContent=`${d.summary.low_rating.toFixed(0)} → ${d.summary.peak_rating.toFixed(0)}`;$('tl-title').textContent=`${d.team.name} · Elo trajectory`;drawTimeline(d.points);$('timeline-games').innerHTML=d.points.slice(-16).reverse().map(p=>`<div class="game-chip ${p.win?'win':'loss'}"><span>${p.date} · ${p.home?'vs':'@'} ${p.opponent}</span><strong>${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin}</strong><span>${p.wins}-${p.losses} · Elo ${p.rating.toFixed(0)}</span></div>`).join('')}
@@ -348,6 +348,7 @@ function setScenarioShareStatus(message,isError){
 }
 function clearScenarioResults(){
   scenarioLast=null;
+  scenarioLastRequest=null;
   $('scenario-win-swing').textContent='—';
   $('scenario-title-swing').textContent='—';
   $('scenario-sims').textContent='—';
@@ -611,7 +612,7 @@ $('scenario-run').onclick=async function(){
   try{
     const body=buildScenarioRequest();validateScenarioRequest(body);
     const d=await json('/api/scenario/player-absence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    scenarioLast=d;renderScenario(d);
+    scenarioLast=d;scenarioLastRequest=body;renderScenario(d);
   }catch(e){
     $('scenario-effects').classList.add('empty');$('scenario-effects').innerHTML='<span>'+e.message+'</span>';
   }finally{button.disabled=false}
@@ -745,13 +746,41 @@ function renderScenarioSchedule(d){
     if(Math.abs(g.away_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.away_team+' '+(g.away_elo_delta>=0?'+':'')+g.away_elo_delta.toFixed(0)+' Elo</span>');
     if(Math.abs(g.home_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.home_team+' '+(g.home_elo_delta>=0?'+':'')+g.home_elo_delta.toFixed(0)+' Elo</span>');
     const delta=g.home_win_probability_delta;
-    return '<div class="scenario-game-row">'
+    return '<div class="scenario-game-row" data-scenario-game="'+g.game_id+'" title="Open this affected game in Matchup Lab">'
       +'<div class="scenario-game-date">'+g.date+'</div>'
       +'<div class="scenario-game-matchup"><strong>'+g.away_team+' @ '+g.home_team+'</strong><span>'+pct(g.baseline_home_win_probability)+' → '+pct(g.altered_home_win_probability)+' home win</span></div>'
       +'<div class="scenario-game-deltas">'+deltas.join('')+'</div>'
       +'<div class="scenario-game-prob"><strong class="'+(delta>=0?'positive':'negative')+'">'+(delta>=0?'+':'')+(100*delta).toFixed(1)+' pts</strong><span>home-win shift</span></div>'
       +'</div>';
   }).join('');
+  document.querySelectorAll('[data-scenario-game]').forEach(function(row){
+    row.onclick=function(){openScenarioMatchup(row.dataset.scenarioGame)};
+  });
+}
+
+async function openScenarioMatchup(gameId){
+  if(!scenarioLastRequest)return;
+  const body=Object.assign({},scenarioLastRequest,{
+    game_id:gameId,
+    trials:Number($('matchup-trials').value||5000)
+  });
+  try{
+    const d=await json('/api/scenario/matchup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    openView('matchup');
+    $('matchup-a').value=d.game.home_team;
+    $('matchup-b').value=d.game.away_team;
+    $('matchup-date').value=scenarioLastRequest.as_of;
+    $('matchup-bestof').value='1';
+    renderMatchup(d.scenario);
+    const delta=d.home_win_probability_delta;
+    const adjustments=Object.entries(d.rating_adjustments||{}).map(function(entry){
+      return entry[0]+' '+(entry[1]>=0?'+':'')+entry[1].toFixed(0)+' Elo';
+    }).join(' · ');
+    $('matchup-context').hidden=false;
+    $('matchup-context').innerHTML='<div><strong>SCENARIO MATCHUP · '+d.game.away_team+' @ '+d.game.home_team+' · '+d.game.date+'</strong><span>'+(adjustments||'No direct player/trade adjustment')+' · same altered history, single-game comparison</span></div><div class="scenario-shift">'+pct(d.baseline.team_a_series_probability)+' → '+pct(d.scenario.team_a_series_probability)+' <small>home win</small></div>';
+  }catch(e){
+    setScenarioShareStatus('Could not open scenario matchup: '+e.message,true);
+  }
 }
 
 function renderScenarioAwardRipple(d){
