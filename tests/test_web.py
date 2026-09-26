@@ -320,3 +320,31 @@ def test_scenario_reports_affected_schedule_probability_shifts():
     assert len(data['affected_games']) == 4
     assert all('home_win_probability_delta' in row for row in data['affected_games'])
     assert any(abs(row['home_win_probability_delta']) > 0 for row in data['affected_games'])
+
+
+def test_home_page_contains_all_live_lab_views():
+    html = client.get('/').text
+    for view_id in (
+        'view-season',
+        'view-scenario',
+        'view-matchup',
+        'view-timeline',
+        'view-model',
+        'view-awards',
+        'view-impact',
+        'view-lineup',
+        'view-leverage',
+        'view-game',
+    ):
+        assert f'id="{view_id}"' in html
+
+    for element_id in (
+        'matchup-a',
+        'matchup-b',
+        'matchup-date',
+        'matchup-bestof',
+        'matchup-trials',
+        'matchup-run',
+        'matchup-result',
+    ):
+        assert f'id="{element_id}"' in html
