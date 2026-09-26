@@ -685,6 +685,24 @@ def leverage(as_of: date, trials: int = 500, limit: int = 10):
     }
 
 
+def _replay_lineup_context_available(game) -> bool:
+    try:
+        snapshot = _impact_snapshot_as_of(game.game_date)
+        rapm = _impact_result(1000.0, game.game_date)
+    except ValueError:
+        return False
+    available = {row.player_id for row in rapm.players}
+    for team in (game.home_team, game.away_team):
+        count = sum(
+            1
+            for player_id, meta in snapshot.players.items()
+            if meta.team == team and player_id in available
+        )
+        if count < 5:
+            return False
+    return True
+
+
 @app.get("/api/replay/games")
 def replay_games():
     game_by_id = {game.game_id: game for game in GAMES}
@@ -702,9 +720,110 @@ def replay_games():
             "away_score": game.away_score,
             "events": len(snapshot.events),
             "source": snapshot.source,
+            "lineup_context_available": _replay_lineup_context_available(game),
         })
     rows.sort(key=lambda row: (row["date"], row["game_id"]), reverse=True)
     return {"source": REPLAY_SOURCE, "games": rows}
+
+
+@app.get("/api/replay/{game_id}/lineup-context")
+def replay_lineup_context(
+    game_id: str,
+    alpha: float = 1000.0,
+    prior_possessions: float = 300.0,
+):
+    if alpha <= 0 or alpha > 10000:
+        raise HTTPException(422, "alpha must be in (0, 10000]")
+    if prior_possessions <= 0 or prior_possessions > 5000:
+        raise HTTPException(422, "prior_possessions must be in (0, 5000]")
+    game = next((row for row in GAMES if row.game_id == game_id), None)
+    if game is None:
+        raise HTTPException(404, f"Unknown scheduled game: {game_id}")
+    if game_id not in REPLAY_SNAPSHOTS:
+        raise HTTPException(404, f"No replay snapshot for game: {game_id}")
+
+    try:
+        snapshot = _impact_snapshot_as_of(game.game_date)
+        rapm = _impact_result(float(alpha), game.game_date)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    impact_by_id = {row.player_id: row for row in rapm.players}
+
+    def side_payload(side: str, team: str):
+        player_ids = [
+            player_id
+            for player_id, meta in snapshot.players.items()
+            if meta.team == team and player_id in impact_by_id
+        ]
+        players = []
+        for player_id in player_ids:
+            meta = snapshot.players[player_id]
+            impact = impact_by_id[player_id]
+            players.append({
+                "player_id": player_id,
+                "player_name": meta.player_name,
+                "team": team,
+                "impact_per_100": impact.impact_per_100,
+                "lower_80": impact.lower_80,
+                "upper_80": impact.upper_80,
+                "possessions": impact.possessions,
+            })
+        players.sort(key=lambda row: (-row["impact_per_100"], row["player_name"]))
+        if len(player_ids) < 5:
+            return {
+                "side": side,
+                "team": team,
+                "available": False,
+                "players": players,
+                "reason": "fewer than five point-in-time player-impact estimates",
+            }
+        try:
+            baseline = most_observed_lineup(
+                snapshot,
+                rapm,
+                team,
+                prior_possessions=prior_possessions,
+            )
+        except ValueError as exc:
+            return {
+                "side": side,
+                "team": team,
+                "available": False,
+                "players": players,
+                "reason": str(exc),
+            }
+        return {
+            "side": side,
+            "team": team,
+            "available": True,
+            "players": players,
+            "baseline": {
+                **asdict(baseline),
+                "player_meta": [
+                    asdict(snapshot.players[player_id])
+                    for player_id in baseline.players
+                ],
+                "source_kind": (
+                    "observed_unit"
+                    if baseline.observed_possessions > 0
+                    else "modeled_fallback"
+                ),
+            },
+        }
+
+    home = side_payload("home", game.home_team)
+    away = side_payload("away", game.away_team)
+    return {
+        "game_id": game.game_id,
+        "as_of": game.game_date.isoformat(),
+        "alpha": alpha,
+        "prior_possessions": prior_possessions,
+        "available": bool(home["available"] or away["available"]),
+        "home": home,
+        "away": away,
+        "warning": "Replay lineup context uses only Impact stints strictly before the game date. Snapshot team metadata does not reconstruct historical transactions.",
+    }
 
 
 @app.get("/api/replay/{game_id}")
