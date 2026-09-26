@@ -16,6 +16,7 @@ from .awards_sim import simulate_award_futures
 from .awards_source import load_player_logs
 from .backtest import chronological_backtest
 from .branch import compare_game_flip, flip_game
+from .data_bundle import bundle_summary
 from .demo import synthetic_demo_games
 from .demo_awards import synthetic_player_games
 from .diagnostics import calibration_curve
@@ -61,6 +62,24 @@ def _load_games():
 
 
 GAMES, SOURCE = _load_games()
+
+
+def _load_bundle_status():
+    path = os.environ.get(
+        "NBA_LAB_BUNDLE_MANIFEST",
+        "data/nba_lab_bundle_manifest.json",
+    )
+    try:
+        return bundle_summary(path)
+    except ValueError as exc:
+        return {
+            "kind": "invalid_manifest",
+            "path": path,
+            "error": str(exc),
+        }
+
+
+BUNDLE_STATUS = _load_bundle_status()
 
 
 def _load_award_logs():
@@ -275,6 +294,7 @@ def status():
         "impact_stints": len(IMPACT_SNAPSHOT.stints),
         "replay_source": REPLAY_SOURCE,
         "replay_games": len(REPLAY_SNAPSHOTS),
+        "bundle": BUNDLE_STATUS,
     }
 
 

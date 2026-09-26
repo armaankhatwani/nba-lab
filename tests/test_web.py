@@ -724,3 +724,15 @@ def test_scenario_world_honors_forced_result():
     game = next(row for row in data['remaining_games'] if row['game_id'] == target.game_id)
     assert game['forced'] is True
     assert game['winner'] == target.away_team
+
+
+def test_status_exposes_data_bundle_contract():
+    r = client.get('/api/status')
+    assert r.status_code == 200
+    data = r.json()
+    assert 'bundle' in data
+    assert data['bundle']['kind'] in {
+        'none',
+        'bundle_manifest',
+        'invalid_manifest',
+    }

@@ -2,6 +2,27 @@
 
 NBA Lab uses frozen local snapshots when available and deterministic synthetic fixtures otherwise. The UI must always identify which source mode is active.
 
+## Recommended season bundle
+
+The preferred local setup is one reproducible command:
+
+```bash
+nba-lab-sync-bundle \
+  --season 2025-26 \
+  --replay-count 8 \
+  --impact-games 120 \
+  --impact-team BOS \
+  --impact-team NYK \
+  --impact-team DEN \
+  --impact-team OKC
+```
+
+The bundle writes the normal NBA Lab inputs plus `data/nba_lab_bundle_manifest.json`. The manifest records the season, selection settings, per-artifact SHA-256 hashes, replay successes/failures, and Impact QA. Replay acquisition is intentionally partial-failure tolerant: one unavailable PlayByPlay game does not discard the schedule/player snapshots that succeeded.
+
+`nba-lab-doctor` verifies every manifest-tracked artifact before a demo. The Overview's **Data Layer** panel reports the runtime source for each lab independently.
+
+Impact ingestion is optional and heavier because it reconstructs lineup possessions through `pbpstats`. Use `--impact-team` and `--impact-games` to build a focused real-data demo instead of downloading the entire league immediately.
+
 ## Schedule
 
 Canonical schedule source:
@@ -53,7 +74,7 @@ The normalized contract contains:
 
 The parser rejects duplicate players, cross-team duplicate appearance within one stint, unknown player IDs, and empty snapshots.
 
-The project includes an optional `pbpstats`-based ingestion path for possession/lineup reconstruction. Raw event data should be frozen separately from normalized stints when used for reproducible experiments.
+The project includes an optional `pbpstats`-based ingestion path for possession/lineup reconstruction. `nba-lab-sync-impact --team BOS --team NYK --max-games 120` scopes ingestion before the game limit is applied. Raw event data should be frozen separately from normalized stints when used for reproducible experiments.
 
 ## Game Replay
 
@@ -70,7 +91,7 @@ The replay source stores historical event/checkpoint state such as:
 - team;
 - action description/type.
 
-If no replay snapshot exists, deterministic synthetic score checkpoints keep the product runnable offline. Those checkpoints are clearly labeled synthetic.
+If no replay snapshot exists, deterministic synthetic score checkpoints keep the product runnable offline. Those checkpoints are clearly labeled synthetic. The bundle command can automatically choose close completed games, optionally restricted with repeatable `--replay-team` filters.
 
 ## Synthetic cross-lab fixture
 

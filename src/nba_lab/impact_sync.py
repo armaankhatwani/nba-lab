@@ -57,12 +57,34 @@ def possession_to_stint(possession, home_team_id: int, away_team_id: int) -> Sti
     )
 
 
+def select_impact_games(
+    games,
+    max_games: int | None = None,
+    teams: set[str] | None = None,
+):
+    """Select final games for RAPM ingestion with optional team scoping."""
+    if max_games is not None and max_games < 0:
+        raise ValueError("max_games must be non-negative")
+    team_filter = {team.upper() for team in (teams or set())}
+    selected = [game for game in games if game.is_final]
+    if team_filter:
+        selected = [
+            game
+            for game in selected
+            if {game.home_team, game.away_team} & team_filter
+        ]
+    if max_games is not None:
+        selected = selected[:max_games]
+    return selected, team_filter
+
+
 def build_impact_snapshot(
     schedule_path: str | Path,
     output_path: str | Path,
     pbp_dir: str | Path,
     source: str = "file",
     max_games: int | None = None,
+    teams: set[str] | None = None,
 ):
     """Build NBA Lab's normalized impact snapshot using pbpstats."""
     try:
@@ -70,9 +92,11 @@ def build_impact_snapshot(
     except ImportError as exc:
         raise RuntimeError("Install impact extras: pip install -e '.[impact]'") from exc
 
-    games = [g for g in load_snapshot(schedule_path) if g.is_final]
-    if max_games is not None:
-        games = games[:max_games]
+    games, team_filter = select_impact_games(
+        load_snapshot(schedule_path),
+        max_games=max_games,
+        teams=teams,
+    )
 
     settings = {
         "dir": str(pbp_dir),
@@ -126,7 +150,11 @@ def build_impact_snapshot(
         "source": "pbpstats_possessions",
         "players": sorted(players.values(), key=lambda row: (row["team"], row["player_name"])),
         "stints": stints,
-        "qa": dict(qa),
+        "qa": {
+            **dict(qa),
+            "team_filter": sorted(team_filter),
+            "games_selected": len(games),
+        },
     }
 
     output = Path(output_path)

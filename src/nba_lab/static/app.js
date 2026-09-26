@@ -6,7 +6,62 @@ const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['
 function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards();if(name==='impact')loadImpact();if(name==='lineup')loadLineup();if(name==='game')loadReplay();if(name==='scenario')loadScenario()}
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>openView(b.dataset.view));document.querySelectorAll('[data-open]').forEach(c=>c.onclick=()=>openView(c.dataset.open));
 async function loadGames(){const team=$('game-team').value;const q=new URLSearchParams({before:$('asof').value,limit:'50'});if(team)q.set('team',team);const games=await json('/api/games?'+q);$('game').replaceChildren();games.forEach(g=>{const o=document.createElement('option');o.value=g.game_id;o.textContent=`${g.date} · ${g.away_team} ${g.away_score} @ ${g.home_team} ${g.home_score}`;$('game').append(o)});if(!games.length){const o=document.createElement('option');o.textContent='No completed games before this date';$('game').append(o)}}
-async function init(){meta=await json('/api/status');const official=meta.source.kind==='official_snapshot';$('source-short').textContent=official?'Official NBA snapshot':'Synthetic fallback';$('source-detail').textContent=`${meta.games} games · ${meta.teams} teams`;$('source-dot').style.background=official?'var(--green)':'var(--orange)';$('date-range').textContent=`${meta.date_min} → ${meta.date_max}`;teamOptions($('team'));teamOptions($('game-team'),true);teamOptions($('timeline-team'));teamOptions($('matchup-a'));teamOptions($('matchup-b'));$('team').value='NYK';$('timeline-team').value='NYK';$('matchup-a').value='NYK';$('matchup-b').value='BOS';await loadGames();try{const b=await json('/api/backtest');$('brier').textContent=b.brier.toFixed(3)}catch(e){$('brier').textContent='—'}const encoded=new URLSearchParams(window.location.search).get('scenario');if(encoded){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view==='scenario'));$('view-scenario').classList.add('active');$('view-kicker').textContent=viewMeta.scenario[0];$('view-title').textContent=viewMeta.scenario[1];await loadScenario();await restoreScenarioFromUrl()}}
+async function init(){meta=await json('/api/status');const official=meta.source.kind==='official_snapshot';$('source-short').textContent=official?'Official NBA snapshot':'Synthetic fallback';$('source-detail').textContent=`${meta.games} games · ${meta.teams} teams`;$('source-dot').style.background=official?'var(--green)':'var(--orange)';$('date-range').textContent=`${meta.date_min} → ${meta.date_max}`;renderDataReadiness();teamOptions($('team'));teamOptions($('game-team'),true);teamOptions($('timeline-team'));teamOptions($('matchup-a'));teamOptions($('matchup-b'));$('team').value='NYK';$('timeline-team').value='NYK';$('matchup-a').value='NYK';$('matchup-b').value='BOS';await loadGames();try{const b=await json('/api/backtest');$('brier').textContent=b.brier.toFixed(3)}catch(e){$('brier').textContent='—'}const encoded=new URLSearchParams(window.location.search).get('scenario');if(encoded){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view==='scenario'));$('view-scenario').classList.add('active');$('view-kicker').textContent=viewMeta.scenario[0];$('view-title').textContent=viewMeta.scenario[1];await loadScenario();await restoreScenarioFromUrl()}}
+
+function setDataSourceCard(id,isReal,label,detail){
+  const card=$(id);
+  card.classList.remove('real','synthetic','invalid');
+  card.classList.add(isReal?'real':'synthetic');
+  card.querySelector('strong').textContent=label;
+  card.querySelector('small').textContent=detail;
+}
+function renderDataReadiness(){
+  const scheduleReal=meta.source?.kind==='official_snapshot';
+  const awardsReal=meta.awards_source?.kind==='official_snapshot';
+  const impactReal=meta.impact_source?.kind==='normalized_snapshot';
+  const replayReal=meta.replay_source?.kind==='official_snapshot';
+
+  setDataSourceCard(
+    'data-source-schedule',
+    scheduleReal,
+    scheduleReal?'FROZEN NBA DATA':'SYNTHETIC FIXTURE',
+    meta.games.toLocaleString()+' games · '+meta.date_min+' → '+meta.date_max
+  );
+  setDataSourceCard(
+    'data-source-awards',
+    awardsReal,
+    awardsReal?'FROZEN NBA DATA':'SYNTHETIC FIXTURE',
+    Number(meta.award_logs||0).toLocaleString()+' player-game rows'
+  );
+  setDataSourceCard(
+    'data-source-impact',
+    impactReal,
+    impactReal?'NORMALIZED REAL STINTS':'SYNTHETIC FIXTURE',
+    Number(meta.impact_stints||0).toLocaleString()+' RAPM observations'
+  );
+  setDataSourceCard(
+    'data-source-replay',
+    replayReal,
+    replayReal?'FROZEN PLAY-BY-PLAY':'SYNTHETIC FIXTURE',
+    Number(meta.replay_games||0).toLocaleString()+' replay games'
+  );
+
+  const bundle=meta.bundle||{kind:'none'};
+  if(bundle.kind==='bundle_manifest'){
+    const impactText=bundle.impact_status==='ok'
+      ? Number(bundle.impact_stints||0).toLocaleString()+' impact stints'
+      : 'impact '+String(bundle.impact_status||'unknown');
+    $('data-bundle-summary').textContent=
+      'BUNDLE '+bundle.season+' · '+bundle.replay_ok+' replay ready'
+      +(bundle.replay_errors?' · '+bundle.replay_errors+' replay failed':'')
+      +' · '+impactText;
+  }else if(bundle.kind==='invalid_manifest'){
+    $('data-bundle-summary').textContent='bundle manifest invalid · '+bundle.error;
+  }else{
+    $('data-bundle-summary').textContent='no bundle manifest · individual snapshots still supported';
+  }
+}
+
 function setMode(value){mode=value;document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));$('flip-controls').hidden=mode!=='flip';$('strength-controls').hidden=mode!=='strength';$('run').childNodes[0].textContent=mode==='flip'?'REWRITE HISTORY ':'SIMULATE BOTH WORLDS '}
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));$('asof').onchange=loadGames;$('game-team').onchange=loadGames;$('delta').oninput=()=>{$('delta-value').textContent=`${Number($('delta').value)>=0?'+':''}${$('delta').value} Elo`};
 $('run').onclick=async()=>{const start=performance.now();$('run').disabled=true;try{const common={as_of:$('asof').value,trials:Number($('trials').value),seed:2026};let url,body;if(mode==='flip'){url='/api/flip-game';body={...common,game_id:$('game').value}}else{url='/api/compare';body={...common,team:$('team').value,elo_delta:Number($('delta').value)}}const d=await json(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});renderSeason(d);$('runtime').textContent=`${((performance.now()-start)/1000).toFixed(2)}s`}catch(e){$('focus').innerHTML=`<p>${e.message}</p>`}finally{$('run').disabled=false}};
