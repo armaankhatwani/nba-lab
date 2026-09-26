@@ -633,6 +633,42 @@ $('scenario-run').onclick=async function(){
   }finally{button.disabled=false}
 };
 
+
+$('scenario-leverage-run').onclick=async function(){
+  const button=$('scenario-leverage-run');button.disabled=true;
+  const target=$('scenario-leverage-rows');
+  target.classList.add('empty');target.innerHTML='<span>Branching upcoming games inside the alternate world…</span>';
+  try{
+    const body=buildScenarioRequest();validateScenarioRequest(body);
+    const trials=Number($('scenario-leverage-trials').value);
+    const limit=Number($('scenario-leverage-limit').value);
+    const d=await json('/api/scenario/leverage?leverage_trials='+trials+'&limit='+limit,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    renderScenarioLeverage(d);
+  }catch(e){
+    target.classList.add('empty');target.innerHTML='<span>'+e.message+'</span>';
+  }finally{button.disabled=false}
+};
+function renderScenarioLeverage(d){
+  const target=$('scenario-leverage-rows');
+  const rows=d.rows||[];
+  if(!rows.length){target.classList.add('empty');target.innerHTML='<span>No upcoming games are available in this scenario window.</span>';return}
+  const max=Math.max.apply(null,rows.map(function(row){return row.title_distribution_shift}).concat([.001]));
+  target.classList.remove('empty');
+  target.innerHTML=rows.map(function(row){
+    const move=row.rank_movement;
+    const moveText=move>0?('↑ '+move):(move<0?('↓ '+Math.abs(move)):'—');
+    const moveClass=move>0?'up':(move<0?'down':'');
+    const titleDelta=row.title_distribution_shift_delta;
+    return '<div class="scenario-leverage-row">'
+      +'<div class="scenario-leverage-rank"><strong>'+String(row.scenario_rank).padStart(2,'0')+'</strong><span class="'+moveClass+'">'+moveText+' vs #'+row.baseline_rank+'</span></div>'
+      +'<div class="scenario-leverage-game"><strong>'+row.away_team+' @ '+row.home_team+'</strong><span>'+row.game_date+'</span></div>'
+      +'<div class="scenario-leverage-track"><div class="scenario-leverage-fill" style="width:'+(100*row.title_distribution_shift/max)+'%"></div></div>'
+      +'<div class="scenario-leverage-cell"><span>TITLE SHIFT</span><strong>'+pct(row.title_distribution_shift)+'</strong></div>'
+      +'<div class="scenario-leverage-cell"><span>VS BASELINE</span><strong class="'+(titleDelta>=0?'positive':'negative')+'">'+(titleDelta>=0?'+':'')+(100*titleDelta).toFixed(2)+' pts</strong></div>'
+      +'</div>';
+  }).join('');
+}
+
 $('scenario-sensitivity-run').onclick=async function(){
   const button=$('scenario-sensitivity-run');button.disabled=true;
   const target=$('scenario-sensitivity-rows');
