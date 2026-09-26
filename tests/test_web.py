@@ -736,3 +736,73 @@ def test_status_exposes_data_bundle_contract():
         'bundle_manifest',
         'invalid_manifest',
     }
+
+
+def test_model_family_endpoint_exposes_holdout_gate():
+    r = client.get('/api/model/families')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['baseline']['family'] == 'deployed_elo'
+    assert data['tuned_plain']['family'] == 'tuned_plain_elo'
+    assert data['score_aware']['family'] == 'score_aware_elo'
+    assert data['validation_games'] > 0
+    assert data['score_aware_vs_baseline']['games'] == data['validation_games']
+
+
+def test_scenario_game_lineups_apply_trade_and_game_specific_absence():
+    impact = client.get('/api/impact?alpha=1000&limit=500').json()['players']
+    bos = [row for row in impact if row['team'] == 'BOS']
+    den = [row for row in impact if row['team'] == 'DEN']
+
+    scenario_body = {
+        'as_of': '2025-12-20',
+        'trials': 120,
+        'seed': 91,
+        'alpha': 1000,
+        'trades': [{
+            'player_a_id': bos[0]['player_id'],
+            'player_b_id': den[0]['player_id'],
+            'minutes_per_game': 34
+        }],
+        'absences': [{
+            'player_id': bos[1]['player_id'],
+            'games_missed': 20,
+            'minutes_per_game': 30,
+            'replacement_impact_per_100': 0
+        }]
+    }
+
+    scenario = client.post('/api/scenario/player-absence', json=scenario_body)
+    assert scenario.status_code == 200
+    rows = scenario.json()['affected_games']
+
+    # Scoped impact coverage is intentionally incomplete league-wide.
+    assert any(not row['closing_lineup_available'] for row in rows)
+
+    affected = next(
+        row for row in rows
+        if 'BOS' in {row['home_team'], row['away_team']}
+        and row['closing_lineup_available']
+    )
+    assert affected['closing_lineup_player_counts']['BOS'] >= 5
+
+    request = {
+        **scenario_body,
+        'game_id': affected['game_id'],
+        'prior_possessions': 300,
+        'top_k': 3,
+    }
+    r = client.post('/api/scenario/game-lineups', json=request)
+    assert r.status_code == 200
+    data = r.json()
+
+    bos_side = next(row for row in data['teams'] if row['team'] == 'BOS')
+    roster_ids = {
+        row['player_id']
+        for row in bos_side['roster']['player_meta']
+    }
+    assert bos[0]['player_id'] not in roster_ids
+    assert den[0]['player_id'] in roster_ids
+    assert bos[1]['player_id'] not in roster_ids
+    assert bos_side['lineups']
+    assert len(bos_side['lineups'][0]['players']) == 5

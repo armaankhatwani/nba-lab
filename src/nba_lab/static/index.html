@@ -217,6 +217,21 @@
           <div id="elo-surface-verdict" class="elo-surface-verdict"></div>
           <p class="note">Lower Brier is better. The outlined baseline remains deployed unless repeated leakage-safe evaluation justifies promotion; one holdout win is not enough.</p>
         </div>
+        <div class="panel model-family-panel">
+          <div class="section-head"><div><span class="eyebrow">MODEL FAMILY GATE</span><h2>Does score margin add real predictive signal?</h2><p>Both candidate families are selected on the earlier slice only. The same later holdout decides whether the extra score-aware update rule earns another experiment.</p></div><span id="family-status">loading family gate…</span></div>
+          <div class="model-family-cards">
+            <article class="model-family-card baseline"><span>DEPLOYED</span><h3>Plain Elo</h3><strong id="family-base-brier">—</strong><small id="family-base-params">K20 · H65</small></article>
+            <article class="model-family-card"><span>TRAIN-SELECTED</span><h3>Tuned plain Elo</h3><strong id="family-plain-brier">—</strong><small id="family-plain-params">—</small></article>
+            <article class="model-family-card experimental"><span>EXPERIMENTAL</span><h3>Score-aware Elo</h3><strong id="family-score-brier">—</strong><small id="family-score-params">—</small></article>
+          </div>
+          <div class="paired-gate">
+            <div><span>PAIRED HOLDOUT Δ BRIER</span><strong id="family-delta">—</strong><small>score-aware − deployed · lower is better</small></div>
+            <div class="paired-band"><span class="paired-zero"></span><span id="family-band" class="paired-range"></span></div>
+            <div><span>APPROX 95% BAND</span><strong id="family-ci">—</strong><small>paired per-game diagnostic</small></div>
+          </div>
+          <div id="family-verdict" class="model-family-verdict"></div>
+          <p class="note">The 95% band is a paired per-game diagnostic, not a formal independent-game confidence interval. Score-aware Elo remains experimental even if this holdout is favorable.</p>
+        </div>
       </section>
 
       <section class="view" id="view-awards">

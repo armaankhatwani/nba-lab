@@ -94,7 +94,7 @@ async function loadTimeline(){const team=$('timeline-team').value||'NYK';const d
 function drawTimeline(points){const el=$('timeline-chart');if(!points.length){el.innerHTML='';return}const W=900,H=250,pad=34;const vals=points.map(p=>p.rating);const min=Math.min(...vals)-15,max=Math.max(...vals)+15;const x=i=>pad+(W-2*pad)*(i/Math.max(1,points.length-1));const y=v=>H-pad-(H-2*pad)*((v-min)/(max-min));const path=points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.rating).toFixed(1)}`).join(' ');const grids=[min,(min+max)/2,max];el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grids.map(v=>`<line class="grid" x1="${pad}" y1="${y(v)}" x2="${W-pad}" y2="${y(v)}"/><text x="2" y="${y(v)+3}">${v.toFixed(0)}</text>`).join('')}<path class="line" d="${path}"/>${points.map((p,i)=>`<circle class="point ${p.win?'win':'loss'}" cx="${x(i)}" cy="${y(p.rating)}" r="4"><title>${p.date} · ${p.win?'W':'L'} ${p.margin>0?'+':''}${p.margin} vs ${p.opponent} · Elo ${p.rating}</title></circle>`).join('')}</svg>`}
 async function loadDiagnostics(){
   if(diagnosticsLoaded)return;
-  const [d,surface]=await Promise.all([json('/api/diagnostics'),json('/api/model/elo-surface')]);
+  const [d,surface,families]=await Promise.all([json('/api/diagnostics'),json('/api/model/elo-surface'),json('/api/model/families')]);
   diagnosticsLoaded=true;
   $('md-brier').textContent=d.metrics.brier.toFixed(3);
   $('md-logloss').textContent=d.metrics.log_loss.toFixed(3);
@@ -107,6 +107,46 @@ async function loadDiagnostics(){
   $('promotion-rule').textContent=d.model.promotion_rule;
   drawCalibration(d.calibration);
   drawEloSurface(surface);
+  drawModelFamilies(families);
+}
+
+
+function drawModelFamilies(d){
+  const baseline=d.baseline,plain=d.tuned_plain,score=d.score_aware,paired=d.score_aware_vs_baseline;
+  $('family-status').textContent=d.train_games+' train · '+d.validation_games+' holdout · split '+d.split_date;
+  $('family-base-brier').textContent=baseline.validation.brier.toFixed(3);
+  $('family-base-params').textContent='K'+baseline.k.toFixed(0)+' · H'+baseline.home_advantage.toFixed(0);
+  $('family-plain-brier').textContent=plain.validation.brier.toFixed(3);
+  $('family-plain-params').textContent='K'+plain.k.toFixed(0)+' · H'+plain.home_advantage.toFixed(0);
+  $('family-score-brier').textContent=score.validation.brier.toFixed(3);
+  $('family-score-params').textContent='K'+score.k.toFixed(0)+' · H'+score.home_advantage.toFixed(0)+' · margin × '+score.margin_weight.toFixed(2);
+
+  $('family-delta').textContent=(paired.mean_delta>=0?'+':'')+paired.mean_delta.toFixed(4);
+  $('family-delta').className=paired.mean_delta<0?'positive':paired.mean_delta>0?'negative':'';
+  $('family-ci').textContent=(paired.lower_95>=0?'+':'')+paired.lower_95.toFixed(4)+' → '+(paired.upper_95>=0?'+':'')+paired.upper_95.toFixed(4);
+
+  const maxAbs=Math.max(Math.abs(paired.lower_95),Math.abs(paired.upper_95),.0001);
+  const left=50+50*paired.lower_95/maxAbs;
+  const right=50+50*paired.upper_95/maxAbs;
+  $('family-band').style.left=Math.min(left,right)+'%';
+  $('family-band').style.width=Math.max(2,Math.abs(right-left))+'%';
+
+  const verdict=$('family-verdict');
+  verdict.className='model-family-verdict ';
+  if(paired.upper_95<0){
+    verdict.classList.add('promising');
+    verdict.innerHTML='<strong>FOLLOW-UP EXPERIMENT.</strong> Score-aware Elo improves this holdout and the paired diagnostic band stays below zero. Repeat the result on another season before any deployment change.';
+  }else if(paired.lower_95>0){
+    verdict.classList.add('reject');
+    verdict.innerHTML='<strong>DO NOT PROMOTE.</strong> Score-aware Elo is worse across this paired holdout diagnostic. Extra complexity has not earned deployment.';
+  }else{
+    verdict.classList.add('inconclusive');
+    const direction=paired.mean_delta<0?'leans better':'leans worse';
+    verdict.innerHTML='<strong>INCONCLUSIVE.</strong> Score-aware Elo '+direction+' on the point estimate, but the paired diagnostic band crosses zero. Keep the plain Elo baseline deployed.';
+  }
+
+  const plainDelta=plain.validation.brier-baseline.validation.brier;
+  verdict.innerHTML+='<br><span>Tuned plain Elo holdout Δ Brier: '+(plainDelta>=0?'+':'')+plainDelta.toFixed(4)+'. Score-aware train selection: margin weight '+score.margin_weight.toFixed(2)+'.</span>';
 }
 
 function drawEloSurface(d){
@@ -357,6 +397,25 @@ function setLineupScenarioContext(team,asOf){
   $('lineup-context').hidden=false;
   $('lineup-context').innerHTML='<strong>SCENARIO ROSTER · '+team+'</strong><span>Loaded from Scenario Lab as of '+asOf+'. Team labels on Lineup A reflect the altered roster, not the original snapshot metadata.</span>';
 }
+function setLineupScenarioGameContext(d){
+  const teamByPlayer={};
+  const allowed=[];
+  (d.teams||[]).forEach(function(side){
+    (side.roster?.player_meta||[]).forEach(function(player){
+      teamByPlayer[player.player_id]=side.team;
+      allowed.push(player.player_id);
+    });
+  });
+  lineupScenarioContext={
+    as_of:d.as_of,
+    game:d.game,
+    team_by_player:teamByPlayer,
+    allowed_player_ids:[...new Set(allowed)]
+  };
+  $('lineup-context').hidden=false;
+  const forced=d.forced_winner?(' · SCENARIO FIXES '+d.forced_winner+' TO WIN'):'';
+  $('lineup-context').innerHTML='<strong>SCENARIO GAME ROSTERS · '+d.game.away_team+' @ '+d.game.home_team+' · '+d.game.date+'</strong><span>Trade swaps and game-specific absences are applied. The player pool is restricted to these two altered rosters'+forced+'.</span>';
+}
 
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
@@ -388,7 +447,8 @@ function renderLineupSlots(){
       const pid=players[i];
       const p=lineupPool.find(x=>x.player_id===pid);
       if(!p)return `<div class="lineup-slot empty"><strong>OPEN SLOT</strong><span>player ${i+1}</span></div>`;
-      return `<div class="lineup-slot"><button data-remove-side="${side}" data-remove-player="${pid}">×</button><strong>${p.player_name}</strong><span>${p.team} · ${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(1)}</span></div>`;
+      const displayTeam=(lineupScenarioContext?.team_by_player||{})[pid]||p.team;
+      return `<div class="lineup-slot"><button data-remove-side="${side}" data-remove-player="${pid}">×</button><strong>${p.player_name}</strong><span>${displayTeam} · ${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(1)}</span></div>`;
     }).join('');
   }
   document.querySelectorAll('[data-remove-player]').forEach(button=>button.onclick=()=>{
@@ -401,9 +461,15 @@ function renderLineupPool(){
   const q=($('lineup-search').value||'').toLowerCase().trim();
   const team=$('lineup-team-filter').value;
   const used=new Set([...lineupA,...lineupB]);
-  const rows=lineupPool.filter(p=>(!q||p.player_name.toLowerCase().includes(q)||p.team.toLowerCase().includes(q))&&(!team||p.team===team));
+  const allowed=lineupScenarioContext?.allowed_player_ids?new Set(lineupScenarioContext.allowed_player_ids):null;
+  const rows=lineupPool.filter(function(p){
+    const displayTeam=(lineupScenarioContext?.team_by_player||{})[p.player_id]||p.team;
+    return (!allowed||allowed.has(p.player_id))
+      &&(!q||p.player_name.toLowerCase().includes(q)||displayTeam.toLowerCase().includes(q))
+      &&(!team||displayTeam===team);
+  });
   $('lineup-player-pool').innerHTML=rows.map(p=>`<div class="pool-player ${used.has(p.player_id)?'used':''}">
-    <div><strong>${p.player_name}</strong><span>${p.team} · RAPM ${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(2)} · ${Math.round(p.possessions).toLocaleString()} poss</span></div>
+    <div><strong>${p.player_name}</strong><span>${((lineupScenarioContext?.team_by_player||{})[p.player_id]||p.team)} · RAPM ${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(2)} · ${Math.round(p.possessions).toLocaleString()} poss</span></div>
     <div class="pool-actions"><button data-add-a="${p.player_id}" title="Add to lineup A">A</button><button data-add-b="${p.player_id}" title="Add to lineup B">B</button></div>
   </div>`).join('');
   document.querySelectorAll('[data-add-a]').forEach(b=>b.onclick=()=>addLineupPlayer('a',b.dataset.addA));
@@ -1275,15 +1341,23 @@ function renderScenarioSchedule(d){
     if(Math.abs(g.home_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.home_team+' '+(g.home_elo_delta>=0?'+':'')+g.home_elo_delta.toFixed(0)+' Elo</span>');
     if(g.forced_winner)deltas.push('<span class="scenario-game-delta scenario-game-forced">FORCED '+g.forced_winner+' WIN</span>');
     const delta=g.home_win_probability_delta;
-    return '<div class="scenario-game-row" data-scenario-game="'+g.game_id+'" title="Open this affected game in Matchup Lab">'
+    return '<div class="scenario-game-row">'
       +'<div class="scenario-game-date">'+g.date+'</div>'
       +'<div class="scenario-game-matchup"><strong>'+g.away_team+' @ '+g.home_team+'</strong><span>'+pct(g.baseline_home_win_probability)+' → '+pct(g.altered_home_win_probability)+' home win</span></div>'
       +'<div class="scenario-game-deltas">'+deltas.join('')+'</div>'
       +'<div class="scenario-game-prob"><strong class="'+(delta>=0?'positive':'negative')+'">'+(delta>=0?'+':'')+(100*delta).toFixed(1)+' pts</strong><span>'+(g.forced_winner?'model shift · result fixed':'home-win shift')+'</span></div>'
+      +'<div class="scenario-game-actions"><button data-scenario-matchup="'+g.game_id+'">MATCHUP ↗</button>'
+      +(g.closing_lineup_available
+        ?'<button data-scenario-lineups="'+g.game_id+'">CLOSING 5 ↗</button>'
+        :'<button disabled title="Both teams need five point-in-time RAPM players">NO IMPACT DATA</button>')
+      +'</div>'
       +'</div>';
   }).join('');
-  document.querySelectorAll('[data-scenario-game]').forEach(function(row){
-    row.onclick=function(){openScenarioMatchup(row.dataset.scenarioGame)};
+  document.querySelectorAll('[data-scenario-matchup]').forEach(function(button){
+    button.onclick=function(){openScenarioMatchup(button.dataset.scenarioMatchup)};
+  });
+  document.querySelectorAll('[data-scenario-lineups]').forEach(function(button){
+    button.onclick=function(){openScenarioGameLineups(button.dataset.scenarioLineups)};
   });
 }
 
@@ -1310,6 +1384,44 @@ async function openScenarioMatchup(gameId){
     $('matchup-context').innerHTML='<div><strong>SCENARIO MATCHUP · '+d.game.away_team+' @ '+d.game.home_team+' · '+d.game.date+'</strong><span>'+(adjustments||'No direct player/trade adjustment')+' · same altered history, single-game model context'+forced+'</span></div><div class="scenario-shift">'+pct(d.baseline.team_a_series_probability)+' → '+pct(d.scenario.team_a_series_probability)+' <small>home win model</small></div>';
   }catch(e){
     setScenarioShareStatus('Could not open scenario matchup: '+e.message,true);
+  }
+}
+
+
+async function openScenarioGameLineups(gameId){
+  if(!scenarioLastRequest)return;
+  const body=Object.assign({},scenarioLastRequest,{
+    game_id:gameId,
+    prior_possessions:Number($('lineup-prior').value||300),
+    top_k:5
+  });
+  try{
+    const d=await json('/api/scenario/game-lineups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const home=d.teams.find(function(side){return side.team===d.game.home_team});
+    const away=d.teams.find(function(side){return side.team===d.game.away_team});
+    if(!home?.lineups?.length||!away?.lineups?.length){
+      throw Error('No eligible five-man group for one side.');
+    }
+
+    $('lineup-date').value=d.as_of;
+    $('lineup-alpha').value=String(d.alpha);
+    $('lineup-prior').value=String(d.prior_possessions);
+    openView('lineup');
+    await loadLineup();
+
+    const available=new Set(lineupPool.map(function(p){return p.player_id}));
+    lineupA=home.lineups[0].players.filter(function(pid){return available.has(pid)});
+    lineupB=away.lineups[0].players.filter(function(pid){return available.has(pid)});
+    setLineupScenarioGameContext(d);
+    resetLineupResult();
+    renderLineupSlots();
+    renderLineupPool();
+
+    $('lineup-a-meta').innerHTML='<span class="lineup-seen">SCENARIO '+home.team+'</span> · top modeled closing group';
+    $('lineup-b-meta').innerHTML='<span class="lineup-seen">SCENARIO '+away.team+'</span> · top modeled closing group';
+    $('lineup-margin-note').textContent='Scenario closing fives loaded · compare when ready';
+  }catch(e){
+    setScenarioShareStatus('Could not open scenario closing fives: '+e.message,true);
   }
 }
 

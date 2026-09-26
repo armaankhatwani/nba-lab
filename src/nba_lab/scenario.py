@@ -104,6 +104,15 @@ class HistoricalFlipEffect:
 
 
 @dataclass(frozen=True)
+class ScenarioRoster:
+    team: str
+    player_ids: tuple[str, ...]
+    traded_in: tuple[str, ...]
+    traded_out: tuple[str, ...]
+    unavailable: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ScenarioInputs:
     altered_games: tuple[Game, ...]
     team_rating_adjustments: dict[str, float]
@@ -369,6 +378,48 @@ def _build_impact_sensitivity_adjustments(
         )
 
     return lower_games, upper_games, lower_teams, upper_teams
+
+def scenario_roster_for_game(
+    impact_snapshot: ImpactSnapshot,
+    inputs: ScenarioInputs,
+    team: str,
+    game_id: str,
+) -> ScenarioRoster:
+    """Return the scenario roster available to one team for a specific game."""
+    roster = {
+        player_id
+        for player_id, meta in impact_snapshot.players.items()
+        if meta.team == team
+    }
+    traded_in: list[str] = []
+    traded_out: list[str] = []
+    unavailable: list[str] = []
+
+    for trade in inputs.trades:
+        if trade.team_a == team:
+            roster.discard(trade.player_a_id)
+            roster.add(trade.player_b_id)
+            traded_out.append(trade.player_a_id)
+            traded_in.append(trade.player_b_id)
+        elif trade.team_b == team:
+            roster.discard(trade.player_b_id)
+            roster.add(trade.player_a_id)
+            traded_out.append(trade.player_b_id)
+            traded_in.append(trade.player_a_id)
+
+    for absence in inputs.player_absences:
+        if absence.team == team and game_id in absence.affected_game_ids:
+            roster.discard(absence.player_id)
+            unavailable.append(absence.player_id)
+
+    return ScenarioRoster(
+        team=team,
+        player_ids=tuple(sorted(roster)),
+        traded_in=tuple(sorted(traded_in)),
+        traded_out=tuple(sorted(traded_out)),
+        unavailable=tuple(sorted(unavailable)),
+    )
+
 
 def build_scenario_inputs(
     games: list[Game],

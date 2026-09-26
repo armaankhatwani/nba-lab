@@ -15,9 +15,18 @@ The deployed season baseline is intentionally simple:
 - K-factor is 20;
 - team strength is frozen at the selected cutoff during a Monte Carlo path;
 - future simulated results do not recursively update Elo;
-- paired comparisons reuse the same seed/common random stream to reduce Monte Carlo noise.
+- paired comparisons reuse the same seed/common random stream to reduce Monte Carlo noise;
+- date-only historical snapshots use one entering-day rating state for every game on that date, so arbitrary game-id ordering cannot leak one same-day result into another.
 
 A more complex model is not promoted merely because it is more sophisticated. It must beat the baseline chronologically or unlock a new validated interaction.
+
+## Experimental team-strength family
+
+Model Lab also evaluates a **score-aware Elo** candidate. It keeps the same Elo win-probability formula but allows final score margin to scale the size of the postgame rating update.
+
+The candidate's K-factor, home advantage, and margin weight are selected on an earlier chronological slice only. It is then compared with the deployed Elo baseline on a later untouched holdout using paired per-game Brier-loss differences. The displayed approximate 95% band is a diagnostic rather than a formal independent-game confidence interval.
+
+A favorable result earns a follow-up experiment, not automatic deployment.
 
 ## Season and postseason simulation
 
@@ -65,6 +74,8 @@ A player cannot simultaneously be traded and absent in one scenario yet because 
 ### Lineup estimates
 
 Lineup Lab combines an additive RAPM prior with observed lineup net rating using possession-weighted shrinkage. An unseen lineup falls back to the prior. It does not invent a chemistry term.
+
+The rotation optimizer enumerates available five-man combinations and ranks them with the same model. Scenario game drilldowns rebuild each team's roster after trades and game-specific absences before optimizing the closing groups. A forced game result remains an outcome assumption and does not alter lineup availability.
 
 ### One concrete future
 
