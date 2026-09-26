@@ -30,6 +30,7 @@ def evaluate_game_leverage(
     as_of: date,
     trials: int = 1000,
     seed: int = 2026,
+    rating_adjustments: dict[str, float] | None = None,
     game_rating_adjustments: dict[str, dict[str, float]] | None = None,
     forced_winners: dict[str, str] | None = None,
 ) -> GameLeverage:
@@ -45,6 +46,7 @@ def evaluate_game_leverage(
         as_of,
         trials=trials,
         seed=seed,
+        rating_adjustments=rating_adjustments,
         game_rating_adjustments=game_rating_adjustments,
         forced_winners=home_forced,
     )
@@ -53,6 +55,7 @@ def evaluate_game_leverage(
         as_of,
         trials=trials,
         seed=seed,
+        rating_adjustments=rating_adjustments,
         game_rating_adjustments=game_rating_adjustments,
         forced_winners=away_forced,
     )
@@ -98,6 +101,7 @@ def rank_upcoming_games(
     trials: int = 1000,
     seed: int = 2026,
     limit: int = 12,
+    rating_adjustments: dict[str, float] | None = None,
     game_rating_adjustments: dict[str, dict[str, float]] | None = None,
     excluded_game_ids: set[str] | None = None,
     forced_winners: dict[str, str] | None = None,
@@ -118,6 +122,7 @@ def rank_upcoming_games(
             as_of,
             trials=trials,
             seed=seed,
+            rating_adjustments=rating_adjustments,
             game_rating_adjustments=game_rating_adjustments,
             forced_winners=forced_winners,
         )

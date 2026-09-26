@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from nba_lab.web import app
+from nba_lab.web import GAMES, app
 
 client = TestClient(app)
 
@@ -659,3 +659,68 @@ def test_scenario_lineups_remove_absent_player_from_available_fives():
         '1628369' not in lineup['players']
         for lineup in bos['scenario_lineups']
     )
+
+
+def test_trade_scenario_exposes_persistent_team_strength():
+    players = client.get('/api/impact?alpha=1000&limit=100').json()['players']
+    a = players[0]
+    b = next(row for row in reversed(players) if row['team'] != a['team'])
+    r = client.post('/api/scenario/run', json={
+        'as_of': '2026-01-15',
+        'trials': 120,
+        'seed': 92,
+        'alpha': 1000,
+        'trades': [{
+            'player_a_id': a['player_id'],
+            'player_b_id': b['player_id'],
+            'minutes_per_game': 34
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    adjustments = data['team_rating_adjustments']
+    assert adjustments[a['team']] != 0
+    assert adjustments[b['team']] != 0
+    assert adjustments[a['team']] * adjustments[b['team']] <= 0
+    assert data['affected_games']
+
+
+def test_scenario_world_returns_complete_playoff_path():
+    r = client.post('/api/scenario/world?world_seed=123', json={
+        'as_of': '2026-01-15',
+        'trials': 100,
+        'seed': 2026,
+        'alpha': 1000,
+        'future_results': []
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data['seed'] == 123
+    assert len(data['standings']) == 30
+    assert len([row for row in data['standings'] if row['playoff_seed'] is not None]) == 16
+    assert len(data['play_in_games']) == 6
+    assert len(data['series']) == 15
+    assert data['champion']
+
+
+def test_scenario_world_honors_forced_result():
+    # Use the same in-memory schedule as the API fixture.
+    target = next(
+        game for game in GAMES
+        if game.game_date.isoformat() >= '2026-01-15'
+    )
+    r = client.post('/api/scenario/world?world_seed=124', json={
+        'as_of': '2026-01-15',
+        'trials': 100,
+        'seed': 2026,
+        'alpha': 1000,
+        'future_results': [{
+            'game_id': target.game_id,
+            'winner': target.away_team
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    game = next(row for row in data['remaining_games'] if row['game_id'] == target.game_id)
+    assert game['forced'] is True
+    assert game['winner'] == target.away_team

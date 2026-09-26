@@ -60,6 +60,21 @@ def _series(higher: str, lower: str, ratings, model: EloModel, rng: random.Rando
     raise RuntimeError("best-of-seven series did not terminate")
 
 
+def _series_by_seed(
+    team_a: str,
+    team_b: str,
+    seed_by_team: dict[str, int],
+    ratings,
+    model: EloModel,
+    rng: random.Random,
+) -> str:
+    if seed_by_team[team_a] < seed_by_team[team_b]:
+        higher, lower = team_a, team_b
+    else:
+        higher, lower = team_b, team_a
+    return _series(higher, lower, ratings, model, rng)
+
+
 def _conference_playoffs(order: list[str], ratings, model: EloModel, rng: random.Random):
     if len(order) < 10:
         return [], None
@@ -70,6 +85,7 @@ def _conference_playoffs(order: list[str], ratings, model: EloModel, rng: random
     nine_ten_winner = _single_game(nine, ten, ratings, model, rng)
     eighth_seed = _single_game(seven_eight_loser, nine_ten_winner, ratings, model, rng)
     seeds = top6 + [seven_eight_winner, eighth_seed]
+    seed_by_team = {team: index + 1 for index, team in enumerate(seeds)}
 
     qf = [
         _series(seeds[0], seeds[7], ratings, model, rng),
@@ -77,9 +93,9 @@ def _conference_playoffs(order: list[str], ratings, model: EloModel, rng: random
         _series(seeds[2], seeds[5], ratings, model, rng),
         _series(seeds[1], seeds[6], ratings, model, rng),
     ]
-    sf1 = _series(qf[0], qf[1], ratings, model, rng)
-    sf2 = _series(qf[2], qf[3], ratings, model, rng)
-    champion = _series(sf1, sf2, ratings, model, rng)
+    sf1 = _series_by_seed(qf[0], qf[1], seed_by_team, ratings, model, rng)
+    sf2 = _series_by_seed(qf[2], qf[3], seed_by_team, ratings, model, rng)
+    champion = _series_by_seed(sf1, sf2, seed_by_team, ratings, model, rng)
     return seeds, champion
 
 
