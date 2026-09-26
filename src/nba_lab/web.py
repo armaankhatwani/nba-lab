@@ -334,6 +334,23 @@ def games(before: date, team: str | None = None, limit: int = 40):
     ]
 
 
+@app.get("/api/upcoming-games")
+def upcoming_games(as_of: date, limit: int = 100):
+    rows = sorted(
+        (game for game in GAMES if game.game_date >= as_of),
+        key=lambda game: (game.game_date, game.game_id),
+    )
+    return [
+        {
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+        }
+        for game in rows[: max(1, min(limit, 250))]
+    ]
+
+
 @app.post("/api/flip-game")
 def flip_game_result(request: FlipRequest):
     try:
