@@ -36,6 +36,12 @@ Known approximations:
 
 A completed game before the cutoff can be reversed. NBA Lab rebuilds the historical Elo state from the altered result and reuses paired randomness for future comparisons.
 
+### Forced future result
+
+A scheduled game on or after the Scenario cutoff can be assigned a deterministic winner. That winner is held fixed in every altered Monte Carlo path while the baseline world remains stochastic.
+
+Forced results are assumptions, not predictions. They are propagated into season simulation, Scenario sensitivity, scenario-aware MVP futures, and the leverage context for other upcoming games. A fixed game is removed from Scenario-Leverage ranking because its outcome is no longer uncertain.
+
 ### Player impact / RAPM
 
 Player Impact fits weighted ridge adjusted plus-minus from normalized five-man lineup stints. It attempts to separate a player's association with point differential from the other nine players on the floor.
