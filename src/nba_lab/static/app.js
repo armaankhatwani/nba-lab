@@ -62,12 +62,22 @@ $('leverage-run').onclick=async()=>{
     const max=Math.max(...rows.map(r=>r.title_distribution_shift),.001);
     $('leverage-rows').innerHTML=rows.map((r,i)=>`<div class="leverage-row">
       <div class="leverage-rank">${String(i+1).padStart(2,'0')}</div>
-      <div class="leverage-game"><strong>${r.away_team} @ ${r.home_team}</strong><span>${r.game_date}</span></div>
+      <div class="leverage-game"><strong>${r.away_team} @ ${r.home_team}</strong><span>${r.game_date}</span><div class="leverage-branch-actions"><button data-force-leverage="${r.game_id}" data-force-winner="${r.home_team}">FORCE ${r.home_team}</button><button data-force-leverage="${r.game_id}" data-force-winner="${r.away_team}">FORCE ${r.away_team}</button></div></div>
       <div class="leverage-track"><div class="leverage-fill" style="width:${100*r.title_distribution_shift/max}%"></div></div>
       <div class="leverage-cell"><span>TITLE SHIFT</span><strong>${pct(r.title_distribution_shift)}</strong></div>
       <div class="leverage-cell"><span>PLAYOFF SHIFT</span><strong>${pct(r.playoff_distribution_shift)}</strong></div>
       <div class="leverage-cell leverage-swing"><span>BIGGEST TITLE SWING</span><strong>${r.biggest_title_swing_team||'—'} ${r.biggest_title_swing_team?(r.biggest_title_swing>=0?'+':'')+(r.biggest_title_swing*100).toFixed(1)+' pts':''}</strong></div>
     </div>`).join('');
+    document.querySelectorAll('[data-force-leverage]').forEach(function(button){
+      button.onclick=function(event){
+        event.stopPropagation();
+        openForcedResultScenario(
+          button.dataset.forceLeverage,
+          button.dataset.forceWinner,
+          $('leverage-date').value
+        );
+      };
+    });
     $('lev-status').textContent=`${rows.length} games · ${Number(d.trials_per_world).toLocaleString()} trials per branch`;
   }catch(e){
     $('lev-status').textContent=e.message;
@@ -336,6 +346,30 @@ function drawImpactScatter(players){
 }
 
 
+
+function openForcedResultScenario(gameId,winner,asOf){
+  const spec={
+    v:1,
+    request:{
+      as_of:asOf,
+      trials:5000,
+      seed:2026,
+      alpha:1000,
+      flipped_game_ids:[],
+      future_results:[{game_id:gameId,winner:winner}],
+      trades:[],
+      absences:[]
+    },
+    award_trials:750,
+    sensitivity_trials:750,
+    leverage_trials:500,
+    leverage_limit:10
+  };
+  const url=new URL(window.location.href);
+  url.searchParams.set('scenario',encodeScenarioSpec(spec));
+  url.hash='';
+  window.location.href=url.toString();
+}
 
 function encodeScenarioSpec(spec){
   const bytes=new TextEncoder().encode(JSON.stringify(spec));
