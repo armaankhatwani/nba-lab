@@ -162,6 +162,49 @@ def optimize_lineups(
     return tuple(rows[:top_k])
 
 
+
+def most_observed_lineup(
+    snapshot: ImpactSnapshot,
+    rapm: RapmResult,
+    team: str,
+    prior_possessions: float = 300.0,
+) -> LineupEstimate:
+    """Return the team's most-observed five, falling back to the model's top five."""
+    rapm_ids = {player.player_id for player in rapm.players}
+    observations = _lineup_observations(snapshot.stints)
+    candidates = []
+    for players, (possessions, _) in observations.items():
+        if len(players) != 5:
+            continue
+        if not set(players) <= rapm_ids:
+            continue
+        meta = [snapshot.players.get(player_id) for player_id in players]
+        if all(player is not None and player.team == team for player in meta):
+            candidates.append((possessions, players))
+
+    if candidates:
+        _, players = max(candidates, key=lambda row: (row[0], row[1]))
+        return estimate_lineup(
+            snapshot,
+            rapm,
+            tuple(players),
+            prior_possessions=prior_possessions,
+        )
+
+    roster = tuple(
+        player_id
+        for player_id, player in snapshot.players.items()
+        if player.team == team and player_id in rapm_ids
+    )
+    optimized = optimize_lineups(
+        snapshot,
+        rapm,
+        roster,
+        prior_possessions=prior_possessions,
+        top_k=1,
+    )
+    return optimized[0]
+
 def compare_lineups(
     snapshot: ImpactSnapshot,
     rapm: RapmResult,
