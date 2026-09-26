@@ -100,6 +100,17 @@ class ScenarioInputs:
 
 
 @dataclass(frozen=True)
+class ScenarioSensitivityTeam:
+    team: str
+    expected_wins_min: float
+    expected_wins_max: float
+    playoffs_probability_min: float
+    playoffs_probability_max: float
+    championship_probability_min: float
+    championship_probability_max: float
+
+
+@dataclass(frozen=True)
 class ScenarioResult:
     as_of: date
     trials: int
@@ -110,6 +121,7 @@ class ScenarioResult:
     historical_flips: tuple[HistoricalFlipEffect, ...]
     trades: tuple[TradeEffect, ...]
     game_rating_adjustments: dict[str, dict[str, float]]
+    impact_sensitivity: tuple[ScenarioSensitivityTeam, ...]
 
 
 def elo_delta_for_margin(margin_delta: float, margin_sigma: float) -> float:
@@ -421,6 +433,7 @@ def simulate_scenario(
     trades: list[TradeIntervention] | None = None,
     trials: int = 5000,
     seed: int = 2026,
+    include_impact_sensitivity: bool = False,
 ) -> ScenarioResult:
     inputs = build_scenario_inputs(
         games,
@@ -441,6 +454,40 @@ def simulate_scenario(
         seed=seed,
         game_rating_adjustments=inputs.game_rating_adjustments,
     )
+
+    sensitivity: tuple[ScenarioSensitivityTeam, ...] = ()
+    if include_impact_sensitivity and (inputs.player_absences or inputs.trades):
+        low = simulate_remaining_season(
+            list(inputs.altered_games),
+            as_of,
+            trials=trials,
+            seed=seed,
+            game_rating_adjustments=inputs.impact_lower_adjustments,
+        )
+        high = simulate_remaining_season(
+            list(inputs.altered_games),
+            as_of,
+            trials=trials,
+            seed=seed,
+            game_rating_adjustments=inputs.impact_upper_adjustments,
+        )
+        point_by = {row.team: row for row in altered.teams}
+        low_by = {row.team: row for row in low.teams}
+        high_by = {row.team: row for row in high.teams}
+        rows = []
+        for team in sorted(point_by):
+            variants = (point_by[team], low_by[team], high_by[team])
+            rows.append(ScenarioSensitivityTeam(
+                team=team,
+                expected_wins_min=min(row.expected_wins for row in variants),
+                expected_wins_max=max(row.expected_wins for row in variants),
+                playoffs_probability_min=min(row.playoffs_probability for row in variants),
+                playoffs_probability_max=max(row.playoffs_probability for row in variants),
+                championship_probability_min=min(row.championship_probability for row in variants),
+                championship_probability_max=max(row.championship_probability for row in variants),
+            ))
+        sensitivity = tuple(rows)
+
     return ScenarioResult(
         as_of=as_of,
         trials=trials,
@@ -451,4 +498,5 @@ def simulate_scenario(
         historical_flips=inputs.historical_flips,
         trades=inputs.trades,
         game_rating_adjustments=inputs.game_rating_adjustments,
+        impact_sensitivity=sensitivity,
     )
