@@ -27,7 +27,8 @@ Composable alternate worlds using:
 - scenario-aware MVP future simulation;
 - scenario-aware Leverage re-ranking;
 - Leverage → forced-result Scenario branching;
-- reproducible share links.
+- reproducible share links;
+- deterministic one-world rerolls with standings, play-in, playoff bracket, and champion.
 
 ### Matchup Lab
 Single-game and playoff-series simulation from a frozen as-of state.
@@ -63,6 +64,7 @@ Current RAPM-to-team-strength translation is useful but intentionally simple. Im
 - recency weighting / rolling windows;
 - test offensive and defensive splits only if stable;
 - validate the RAPM-to-margin-to-Elo translation against held-out games;
+- validate persistent trade-strength effects separately for regular season and postseason;
 - model replacement minutes from actual rotation context rather than one scalar;
 - support trade + absence timing only after the semantics are explicit.
 
