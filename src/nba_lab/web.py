@@ -844,6 +844,30 @@ def run_scenario(request: ScenarioRequest):
 
     model = EloModel()
     ratings = model.fit_as_of(altered_history, request.as_of)
+
+    # Determine whether each affected game can support a two-team closing-five
+    # drilldown from the exact same point-in-time RAPM slice.
+    lineup_snapshot = None
+    lineup_inputs = None
+    lineup_rapm_ids: set[str] = set()
+    try:
+        lineup_snapshot = _impact_snapshot_as_of(request.as_of)
+        lineup_rapm = _impact_result(float(request.alpha), request.as_of)
+        lineup_rapm_ids = {row.player_id for row in lineup_rapm.players}
+        lineup_inputs = build_scenario_inputs(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            lineup_rapm,
+            _scenario_absences(request),
+            flipped_game_ids=request.flipped_game_ids,
+            future_results=_scenario_future_results(request),
+            trades=_scenario_trades(request),
+        )
+    except ValueError:
+        # Scenario simulation can still be valid even when the impact snapshot
+        # is too sparse for a lineup drilldown.
+        pass
     forced_by_game = {
         row.game_id: row.forced_winner
         for row in result.future_results
@@ -877,6 +901,26 @@ def run_scenario(request: ScenarioRequest):
             ratings[game.home_team] + home_delta,
             ratings[game.away_team] + away_delta,
         )
+        closing_counts = {}
+        if lineup_snapshot is not None and lineup_inputs is not None:
+            for team in (game.home_team, game.away_team):
+                roster = scenario_roster_for_game(
+                    IMPACT_SNAPSHOT,
+                    lineup_inputs,
+                    team,
+                    game.game_id,
+                )
+                closing_counts[team] = sum(
+                    1
+                    for player_id in roster.player_ids
+                    if player_id in lineup_snapshot.players
+                    and player_id in lineup_rapm_ids
+                )
+        closing_available = (
+            closing_counts.get(game.home_team, 0) >= 5
+            and closing_counts.get(game.away_team, 0) >= 5
+        )
+
         affected_games.append({
             "game_id": game.game_id,
             "date": game.game_date.isoformat(),
@@ -890,6 +934,8 @@ def run_scenario(request: ScenarioRequest):
             "baseline_home_win_probability": base_home,
             "altered_home_win_probability": altered_home,
             "home_win_probability_delta": altered_home - base_home,
+            "closing_lineup_available": closing_available,
+            "closing_lineup_player_counts": closing_counts,
         })
 
     return {
@@ -1168,6 +1214,11 @@ def scenario_game_lineups(request: ScenarioGameLineupRequest):
                 for player_id in roster.player_ids
                 if player_id in snapshot.players and player_id in rapm_ids
             )
+            if len(available) < 5:
+                raise ValueError(
+                    f"{team} has only {len(available)} modeled players as of "
+                    f"{request.as_of}; five are required for a closing-lineup drilldown"
+                )
             lineups = optimize_lineups(
                 snapshot,
                 rapm,
