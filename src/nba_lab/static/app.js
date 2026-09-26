@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null;
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,replayLastResult=null,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null,pendingScenarioFlipGameId=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
@@ -110,8 +110,9 @@ function replayClock(seconds){
 }
 function replayPeriod(period){return period<=4?`Q${period}`:`OT${period-4}`}
 function clearReplayResults(){
+  replayLastResult=null;
   ['replay-base-prob','replay-alt-prob','replay-prob-delta','replay-margin'].forEach(id=>$(id).textContent='—');
-  $('replay-run-note').textContent='run a simulation';$('replay-prob-bars').innerHTML='';$('replay-margin-dist').innerHTML='';$('replay-season-panel').hidden=true;$('replay-season-ripple').innerHTML='';
+  $('replay-run-note').textContent='run a simulation';$('replay-prob-bars').innerHTML='';$('replay-margin-dist').innerHTML='';$('replay-season-panel').hidden=true;$('replay-season-ripple').innerHTML='';$('replay-to-scenario').hidden=true;
 }
 function renderReplayEvent(){
   if(!replayData?.events?.length)return;
@@ -161,6 +162,7 @@ $('replay-run').onclick=async()=>{
   }catch(e){$('replay-run-note').textContent=e.message}finally{button.disabled=false}
 };
 function renderReplayResult(d){
+  replayLastResult=d;
   const b=d.baseline,a=d.altered,delta=d.home_win_probability_delta;
   $('replay-base-prob').textContent=pct(b.home_win_probability);
   $('replay-alt-prob').textContent=pct(a.home_win_probability);
@@ -187,6 +189,13 @@ function renderReplayResult(d){
 function renderReplaySeasonRipple(ripple){
   if(!ripple?.teams?.length)return;
   $('replay-season-panel').hidden=false;
+  if(replayData?.game){
+    const game=replayData.game;
+    const actualWinner=Number(game.home_score)>Number(game.away_score)?game.home_team:game.away_team;
+    const opposite=actualWinner===game.home_team?game.away_team:game.home_team;
+    $('replay-to-scenario').textContent='BRANCH: '+opposite+' WINS ↗';
+    $('replay-to-scenario').hidden=false;
+  }
   $('replay-season-note').textContent=`${ripple.trials.toLocaleString()} paired season branches`;
   $('replay-season-ripple').innerHTML=ripple.teams.slice(0,10).map(row=>{
     const title=row.championship_probability_delta*100,playoffs=row.playoffs_probability_delta*100,wins=row.expected_wins_delta;
@@ -195,6 +204,24 @@ function renderReplaySeasonRipple(ripple){
     return `<div class="replay-season-card"><span>${row.team}</span><strong class="${cls}">${wins>=0?'+':''}${wins.toFixed(3)} wins</strong><small>playoffs ${playoffs>=0?'+':''}${playoffs.toFixed(2)} pts<br>title ${title>=0?'+':''}${title.toFixed(2)} pts</small></div>`;
   }).join('');
 }
+
+
+$('replay-to-scenario').onclick=function(){
+  if(!replayData?.game||!replayLastResult)return;
+  const game=replayData.game;
+  const cutoff=new Date(game.date+'T12:00:00Z');
+  cutoff.setUTCDate(cutoff.getUTCDate()+1);
+  const cutoffText=cutoff.toISOString().slice(0,10);
+
+  scenarioAbsences=[];
+  scenarioLast=null;
+  scenarioLastRequest=null;
+  $('scenario-date').value=cutoffText;
+  $('scenario-trade-enabled').checked=false;
+  $('scenario-trade-fields').hidden=true;
+  pendingScenarioFlipGameId=game.game_id;
+  openView('scenario');
+};
 
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
@@ -471,8 +498,18 @@ $('scenario-reset').onclick=async function(){
 async function loadScenario(){
   await loadScenarioPlayers();
   await loadScenarioHistory();
-  if(!scenarioAbsences.length) addScenarioAbsence(selectedImpactPlayerId||((scenarioPlayers[0]||{}).player_id));
+  if(pendingScenarioFlipGameId){
+    const gameId=pendingScenarioFlipGameId;
+    const exists=[].slice.call($('scenario-flip-game').options).some(function(option){return option.value===gameId});
+    if(exists)$('scenario-flip-game').value=gameId;
+    pendingScenarioFlipGameId=null;
+    setScenarioShareStatus(exists?'Replay branch loaded. Add more interventions or run the world.':'Replay game is not available before this cutoff.',!exists);
+  }
+  if(!scenarioAbsences.length&&!$('scenario-flip-game').value&&!$('scenario-trade-enabled').checked){
+    addScenarioAbsence(selectedImpactPlayerId||((scenarioPlayers[0]||{}).player_id));
+  }
   renderScenarioAbsences();
+  updateScenarioCountPreview();
 }
 async function loadScenarioHistory(){
   const select=$('scenario-flip-game');
