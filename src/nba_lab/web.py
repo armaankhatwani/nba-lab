@@ -676,6 +676,64 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
     }
 
 
+@app.post("/api/scenario/sensitivity")
+def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_trials: int = 750):
+    if not request.absences and not request.flipped_game_ids and not request.trades:
+        raise HTTPException(422, "scenario requires at least one intervention")
+    sensitivity_trials = max(100, min(sensitivity_trials, 5000))
+    try:
+        inputs = build_scenario_inputs(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            _impact_result(float(request.alpha)),
+            _scenario_absences(request),
+            flipped_game_ids=request.flipped_game_ids,
+            trades=_scenario_trades(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    altered_games = list(inputs.altered_games)
+    baseline = simulate_remaining_season(
+        GAMES,
+        request.as_of,
+        trials=sensitivity_trials,
+        seed=request.seed,
+    )
+    point = simulate_remaining_season(
+        altered_games,
+        request.as_of,
+        trials=sensitivity_trials,
+        seed=request.seed,
+        game_rating_adjustments=inputs.game_rating_adjustments,
+    )
+    impact_lower = simulate_remaining_season(
+        altered_games,
+        request.as_of,
+        trials=sensitivity_trials,
+        seed=request.seed,
+        game_rating_adjustments=inputs.impact_lower_adjustments,
+    )
+    impact_upper = simulate_remaining_season(
+        altered_games,
+        request.as_of,
+        trials=sensitivity_trials,
+        seed=request.seed,
+        game_rating_adjustments=inputs.impact_upper_adjustments,
+    )
+    return {
+        "as_of": request.as_of.isoformat(),
+        "trials": sensitivity_trials,
+        "baseline": _serialize(baseline),
+        "point": _serialize(point),
+        "impact_lower": _serialize(impact_lower),
+        "impact_upper": _serialize(impact_upper),
+        "definition": "Sensitivity worlds move every player-impact intervention to its approximate lower or upper model-based signal while preserving the same history branch and Monte Carlo seed.",
+        "warning": "These are componentwise model-sensitivity worlds, not confidence intervals on season outcomes.",
+    }
+
+
 @app.post("/api/scenario/awards")
 def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 750):
     if not request.absences and not request.flipped_game_ids and not request.trades:
