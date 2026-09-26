@@ -6,7 +6,7 @@ const viewMeta={home:['NBA LAB / OVERVIEW','Basketball, as a system.'],season:['
 function openView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$(`view-${name}`).classList.add('active');$('view-kicker').textContent=viewMeta[name][0];$('view-title').textContent=viewMeta[name][1];if(name==='timeline')loadTimeline();if(name==='model')loadDiagnostics();if(name==='matchup'&&!$('matchup-a').value)setupMatchup();if(name==='awards')loadAwards();if(name==='impact')loadImpact();if(name==='lineup')loadLineup();if(name==='game')loadReplay();if(name==='scenario')loadScenario()}
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>openView(b.dataset.view));document.querySelectorAll('[data-open]').forEach(c=>c.onclick=()=>openView(c.dataset.open));
 async function loadGames(){const team=$('game-team').value;const q=new URLSearchParams({before:$('asof').value,limit:'50'});if(team)q.set('team',team);const games=await json('/api/games?'+q);$('game').replaceChildren();games.forEach(g=>{const o=document.createElement('option');o.value=g.game_id;o.textContent=`${g.date} · ${g.away_team} ${g.away_score} @ ${g.home_team} ${g.home_score}`;$('game').append(o)});if(!games.length){const o=document.createElement('option');o.textContent='No completed games before this date';$('game').append(o)}}
-async function init(){meta=await json('/api/status');const official=meta.source.kind==='official_snapshot';$('source-short').textContent=official?'Official NBA snapshot':'Synthetic fallback';$('source-detail').textContent=`${meta.games} games · ${meta.teams} teams`;$('source-dot').style.background=official?'var(--green)':'var(--orange)';$('date-range').textContent=`${meta.date_min} → ${meta.date_max}`;teamOptions($('team'));teamOptions($('game-team'),true);teamOptions($('timeline-team'));teamOptions($('matchup-a'));teamOptions($('matchup-b'));$('team').value='NYK';$('timeline-team').value='NYK';$('matchup-a').value='NYK';$('matchup-b').value='BOS';await loadGames();try{const b=await json('/api/backtest');$('brier').textContent=b.brier.toFixed(3)}catch(e){$('brier').textContent='—'}}
+async function init(){meta=await json('/api/status');const official=meta.source.kind==='official_snapshot';$('source-short').textContent=official?'Official NBA snapshot':'Synthetic fallback';$('source-detail').textContent=`${meta.games} games · ${meta.teams} teams`;$('source-dot').style.background=official?'var(--green)':'var(--orange)';$('date-range').textContent=`${meta.date_min} → ${meta.date_max}`;teamOptions($('team'));teamOptions($('game-team'),true);teamOptions($('timeline-team'));teamOptions($('matchup-a'));teamOptions($('matchup-b'));$('team').value='NYK';$('timeline-team').value='NYK';$('matchup-a').value='NYK';$('matchup-b').value='BOS';await loadGames();try{const b=await json('/api/backtest');$('brier').textContent=b.brier.toFixed(3)}catch(e){$('brier').textContent='—'}const encoded=new URLSearchParams(window.location.search).get('scenario');if(encoded){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view==='scenario'));$('view-scenario').classList.add('active');$('view-kicker').textContent=viewMeta.scenario[0];$('view-title').textContent=viewMeta.scenario[1];await loadScenario();await restoreScenarioFromUrl()}}
 function setMode(value){mode=value;document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));$('flip-controls').hidden=mode!=='flip';$('strength-controls').hidden=mode!=='strength';$('run').childNodes[0].textContent=mode==='flip'?'REWRITE HISTORY ':'SIMULATE BOTH WORLDS '}
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));$('asof').onchange=loadGames;$('game-team').onchange=loadGames;$('delta').oninput=()=>{$('delta-value').textContent=`${Number($('delta').value)>=0?'+':''}${$('delta').value} Elo`};
 $('run').onclick=async()=>{const start=performance.now();$('run').disabled=true;try{const common={as_of:$('asof').value,trials:Number($('trials').value),seed:2026};let url,body;if(mode==='flip'){url='/api/flip-game';body={...common,game_id:$('game').value}}else{url='/api/compare';body={...common,team:$('team').value,elo_delta:Number($('delta').value)}}const d=await json(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});renderSeason(d);$('runtime').textContent=`${((performance.now()-start)/1000).toFixed(2)}s`}catch(e){$('focus').innerHTML=`<p>${e.message}</p>`}finally{$('run').disabled=false}};
@@ -320,6 +320,132 @@ function drawImpactScatter(players){
   el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="zero" x1="${pad}" y1="${y(0)}" x2="${W-pad}" y2="${y(0)}"/><line class="grid" x1="${x(exposureCut)}" y1="${pad}" x2="${x(exposureCut)}" y2="${H-pad}"/>${players.map(p=>`<circle class="scatter-point ${p.possessions<exposureCut?'low-sample':''}" cx="${x(p.possessions)}" cy="${y(p.impact_per_100)}" r="5"><title>${p.player_name} · ${p.team} · RAPM ${p.impact_per_100.toFixed(2)} · ${Math.round(p.possessions)} poss</title></circle>`).join('')}<text x="${pad}" y="${H-8}">0 poss</text><text x="${W-pad-50}" y="${H-8}">${Math.round(maxX)} poss</text><text x="3" y="${y(maxY)+3}">${maxY.toFixed(1)}</text><text x="3" y="${y(minY)+3}">${minY.toFixed(1)}</text></svg>`;
 }
 
+
+
+function encodeScenarioSpec(spec){
+  const bytes=new TextEncoder().encode(JSON.stringify(spec));
+  let binary='';
+  bytes.forEach(function(byte){binary+=String.fromCharCode(byte)});
+  return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function decodeScenarioSpec(value){
+  const padded=value.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((value.length+3)%4);
+  const binary=atob(padded);
+  const bytes=Uint8Array.from(binary,function(ch){return ch.charCodeAt(0)});
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+function scenarioShareSpec(){
+  return {
+    v:1,
+    request:buildScenarioRequest(),
+    award_trials:Number($('scenario-award-trials').value||750)
+  };
+}
+function setScenarioShareStatus(message,isError){
+  const el=$('scenario-share-status');
+  el.textContent=message||'';
+  el.classList.toggle('error',!!isError);
+}
+function clearScenarioResults(){
+  scenarioLast=null;
+  $('scenario-win-swing').textContent='—';
+  $('scenario-title-swing').textContent='—';
+  $('scenario-sims').textContent='—';
+  $('scenario-effects').classList.add('empty');
+  $('scenario-effects').innerHTML='<span>Build an intervention to inspect the model translation.</span>';
+  $('scenario-bars').classList.add('empty');
+  $('scenario-bars').innerHTML='<span>Run the scenario to reveal league-wide effects.</span>';
+  $('scenario-rows').innerHTML='';
+  $('scenario-award-panel').hidden=true;
+  $('scenario-award-future-bars').classList.add('empty');
+  $('scenario-award-future-bars').innerHTML='<span>Run an alternate world, then propagate it through the remaining MVP simulation.</span>';
+}
+async function applyScenarioShareSpec(spec){
+  if(!spec||spec.v!==1||!spec.request)throw Error('Unsupported scenario link format.');
+  const request=spec.request;
+  if(request.as_of)$('scenario-date').value=request.as_of;
+  if(request.trials)$('scenario-trials').value=String(request.trials);
+  if(request.alpha)$('scenario-alpha').value=String(request.alpha);
+  if(spec.award_trials)$('scenario-award-trials').value=String(spec.award_trials);
+  await loadScenarioPlayers();
+  await loadScenarioHistory();
+
+  scenarioAbsences=(request.absences||[]).map(function(a){
+    const player=scenarioPlayers.find(function(p){return p.player_id===a.player_id});
+    return {
+      player_id:a.player_id,
+      games_missed:Number(a.games_missed||8),
+      minutes_per_game:Number(a.minutes_per_game||34),
+      replacement_impact_per_100:Number(a.replacement_impact_per_100||0),
+      impact_per_100:player?player.impact_per_100:0
+    };
+  }).filter(function(a){return scenarioPlayers.some(function(p){return p.player_id===a.player_id})});
+
+  const flip=(request.flipped_game_ids||[])[0]||'';
+  if([].slice.call($('scenario-flip-game').options).some(function(o){return o.value===flip}))$('scenario-flip-game').value=flip;
+
+  const trade=(request.trades||[])[0];
+  $('scenario-trade-enabled').checked=!!trade;
+  $('scenario-trade-fields').hidden=!trade;
+  renderScenarioTradeOptions();
+  if(trade){
+    if(scenarioPlayers.some(function(p){return p.player_id===trade.player_a_id}))$('scenario-trade-a').value=trade.player_a_id;
+    if(scenarioPlayers.some(function(p){return p.player_id===trade.player_b_id}))$('scenario-trade-b').value=trade.player_b_id;
+    $('scenario-trade-minutes').value=String(trade.minutes_per_game||34);
+  }
+  renderScenarioAbsences();
+  clearScenarioResults();
+  updateScenarioCountPreview();
+}
+async function restoreScenarioFromUrl(){
+  const encoded=new URLSearchParams(window.location.search).get('scenario');
+  if(!encoded)return false;
+  try{
+    await applyScenarioShareSpec(decodeScenarioSpec(encoded));
+    setScenarioShareStatus('Scenario restored from shared link.',false);
+    return true;
+  }catch(e){
+    setScenarioShareStatus('Could not restore scenario: '+e.message,true);
+    return false;
+  }
+}
+$('scenario-copy').onclick=async function(){
+  try{
+    const spec=scenarioShareSpec();
+    validateScenarioRequest(spec.request);
+    const url=new URL(window.location.href);
+    url.searchParams.set('scenario',encodeScenarioSpec(spec));
+    url.hash='';
+    history.replaceState(null,'',url);
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(url.toString());
+      setScenarioShareStatus('Scenario link copied. Opening it restores this exact world.',false);
+    }else{
+      setScenarioShareStatus('Scenario encoded in the current URL. Copy it from the address bar.',false);
+    }
+  }catch(e){
+    setScenarioShareStatus(e.message,true);
+  }
+};
+$('scenario-reset').onclick=async function(){
+  scenarioAbsences=[];
+  $('scenario-trade-enabled').checked=false;
+  $('scenario-trade-fields').hidden=true;
+  $('scenario-trade-minutes').value='34';
+  $('scenario-flip-game').value='';
+  $('scenario-date').value='2026-01-15';
+  $('scenario-trials').value='5000';
+  $('scenario-alpha').value='1000';
+  $('scenario-award-trials').value='750';
+  await loadScenarioPlayers();
+  await loadScenarioHistory();
+  renderScenarioAbsences();
+  clearScenarioResults();
+  const url=new URL(window.location.href);
+  url.searchParams.delete('scenario');
+  history.replaceState(null,'',url);
+  setScenarioShareStatus('Scenario reset.',false);
+}
 
 async function loadScenario(){
   await loadScenarioPlayers();
