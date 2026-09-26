@@ -21,6 +21,7 @@ from .demo_awards import synthetic_player_games
 from .diagnostics import calibration_curve
 from .elo import EloModel
 from .matchup import simulate_matchup
+from .model_selection import evaluate_elo_surface
 from .impact import fit_rapm
 from .impact_source import load_impact_snapshot, snapshot_as_of
 from .lineup import compare_lineups, optimize_lineups
@@ -1212,6 +1213,38 @@ def timeline(team: str):
             "largest_win": max((point.margin for point in points), default=0),
             "largest_loss": min((point.margin for point in points), default=0),
         },
+    }
+
+
+@app.get("/api/model/elo-surface")
+def model_elo_surface():
+    result = evaluate_elo_surface(GAMES)
+    return {
+        "train_games": result.train_games,
+        "validation_games": result.validation_games,
+        "split_date": result.split_date,
+        "selected_on_train": {
+            "k": result.selected_on_train.k,
+            "home_advantage": result.selected_on_train.home_advantage,
+            "train": asdict(result.selected_on_train.train),
+            "validation": asdict(result.selected_on_train.validation),
+        },
+        "baseline": {
+            "k": result.baseline.k,
+            "home_advantage": result.baseline.home_advantage,
+            "train": asdict(result.baseline.train),
+            "validation": asdict(result.baseline.validation),
+        },
+        "candidates": [
+            {
+                "k": row.k,
+                "home_advantage": row.home_advantage,
+                "train": asdict(row.train),
+                "validation": asdict(row.validation),
+            }
+            for row in result.candidates
+        ],
+        "warning": "The grid is selected only on the earlier chronological slice and evaluated on the later holdout. A single holdout improvement is evidence for further testing, not automatic model promotion.",
     }
 
 
