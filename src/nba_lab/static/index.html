@@ -10,17 +10,19 @@
     <div class="brand"><div class="brand-ball">◉</div><div><strong>NBA LAB</strong><span>basketball systems</span></div></div>
     <nav>
       <button class="nav-item active" data-view="home"><span>⌂</span>Overview</button>
-      <button class="nav-item" data-view="season"><span>↗</span>Season Lab</button>
+      <div class="nav-section">WORLD MODEL</div>
       <button class="nav-item" data-view="scenario"><span>◇</span>Scenario Lab</button>
+      <button class="nav-item" data-view="season"><span>↗</span>Season Lab</button>
       <button class="nav-item" data-view="matchup"><span>⇄</span>Matchup Lab</button>
-      <button class="nav-item" data-view="timeline"><span>⌁</span>Timeline Lab</button>
-      <button class="nav-item" data-view="model"><span>◎</span>Model Lab</button>
-      <div class="nav-section">MORE LABS</div>
+      <button class="nav-item" data-view="leverage"><span>⚖</span>Leverage Lab</button>
+      <button class="nav-item" data-view="game"><span>▶</span>Game Replay</button>
+      <div class="nav-section">PLAYER SYSTEMS</div>
       <button class="nav-item" data-view="awards"><span>★</span>Awards Lab</button>
       <button class="nav-item" data-view="impact"><span>±</span>Player Impact</button>
       <button class="nav-item" data-view="lineup"><span>⬡</span>Lineup Lab</button>
-      <button class="nav-item" data-view="leverage"><span>⚖</span>Leverage Lab</button>
-      <button class="nav-item" data-view="game"><span>▶</span>Game Replay</button>
+      <div class="nav-section">RESEARCH</div>
+      <button class="nav-item" data-view="timeline"><span>⌁</span>Timeline Lab</button>
+      <button class="nav-item" data-view="model"><span>◎</span>Model Lab</button>
     </nav>
     <div class="sidebar-foot"><div id="source-dot" class="dot"></div><div><strong id="source-short">Loading data…</strong><span id="source-detail"></span></div></div>
   </aside>
@@ -30,7 +32,12 @@
 
     <main class="content">
       <section class="view active" id="view-home">
-        <div class="hero-copy"><p>One host for season simulation, composable counterfactual worlds, awards, player impact, lineups, schedule leverage, and historical game replay.</p></div>
+        <div class="hero-copy"><p>One point-in-time basketball system: change a game, player, roster, lineup, or future assumption—and let the same alternate world propagate across the rest of the lab.</p></div>
+        <div class="system-flows">
+          <button data-open="scenario"><span>01 · WORLD</span><strong>Compose an alternate NBA universe</strong><small>history + absences + trades → season + matchups + awards + lineups</small></button>
+          <button data-open="game"><span>02 · MOMENT</span><strong>Rewind a game and branch from there</strong><small>event state → paired win probability → season ripple → Scenario Lab</small></button>
+          <button data-open="lineup"><span>03 · FIVE</span><strong>Ask who should close</strong><small>RAPM + observed units → every five-man combination → robust top groups</small></button>
+        </div>
         <div class="lab-grid">
           <article class="lab-card featured" data-open="season"><span class="card-num">01</span><div><span class="status live">LIVE</span><h2>Season Lab</h2><p>Freeze any date, branch history, and simulate the remaining season through the Finals.</p></div><div class="card-arrow">↗</div></article>
           <article class="lab-card featured" data-open="scenario"><span class="card-num">CORE</span><div><span class="status live">LIVE</span><h2>Scenario Lab</h2><p>Compose history flips, absences, and RAPM-backed trades, then propagate one world through season and MVP futures.</p></div><div class="card-arrow">↗</div></article>
@@ -39,7 +46,7 @@
           <article class="lab-card" data-open="model"><span class="card-num">04</span><div><span class="status live">LIVE</span><h2>Model Lab</h2><p>Inspect calibration, backtests, assumptions, and promotion gates for deployed models.</p></div><div class="card-arrow">↗</div></article>
           <article class="lab-card" data-open="awards"><span class="card-num">05</span><div><span class="status live">LIVE</span><h2>Awards Lab</h2><p>Scrub through the MVP race and simulate alternate season endings from any date.</p></div><div class="card-arrow">↗</div></article>
           <article class="lab-card" data-open="impact"><span class="card-num">06</span><div><span class="status live">LIVE</span><h2>Player Impact</h2><p>Regularized adjusted plus-minus with exposure and shrinkage diagnostics.</p></div><div class="card-arrow">↗</div></article>
-          <article class="lab-card" data-open="lineup"><span class="card-num">07</span><div><span class="status live">LIVE</span><h2>Lineup Lab</h2><p>Build two five-man units and blend RAPM priors with observed lineup evidence.</p></div><div class="card-arrow">↗</div></article>
+          <article class="lab-card featured" data-open="lineup"><span class="card-num">07</span><div><span class="status live">LIVE</span><h2>Lineup Lab</h2><p>Build units, compare them, or enumerate every roster combination to find the strongest modeled closing five.</p></div><div class="card-arrow">↗</div></article>
           <article class="lab-card" data-open="leverage"><span class="card-num">08</span><div><span class="status live">LIVE</span><h2>Leverage Lab</h2><p>Rank upcoming games by how much each possible result can reshape the season.</p></div><div class="card-arrow">↗</div></article>
           <article class="lab-card featured" data-open="game"><span class="card-num">09</span><div><span class="status live">LIVE</span><h2>Game Replay</h2><p>Scrub into a historical game, edit the score state, and simulate forward from that moment.</p></div><div class="card-arrow">↗</div></article>
         </div>
