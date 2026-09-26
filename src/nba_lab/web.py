@@ -884,8 +884,8 @@ def scenario_matchup(request: ScenarioMatchupRequest):
     }
 
 
-@app.post("/api/scenario/lineups")
-def scenario_lineups(request: ScenarioLineupRequest):
+@app.post("/api/scenario/game-lineups")
+def scenario_game_lineups(request: ScenarioLineupRequest):
     if not request.absences and not request.flipped_game_ids and not request.trades:
         raise HTTPException(422, "scenario requires at least one intervention")
 
