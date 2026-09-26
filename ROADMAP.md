@@ -6,109 +6,107 @@ NBA Lab is a host for basketball modeling experiments that share a point-in-time
 
 Every lab should expose a computation that is difficult to fake with prose alone: simulation, reconstruction, optimization, regularized estimation, or probabilistic inference.
 
-The common state should eventually be:
+The shared state is converging toward:
 
-`season -> game -> possession -> stint -> lineup -> player -> context`
+`season -> game -> possession -> stint -> lineup -> player -> context -> scenario`
 
 ## Live now
 
-### 1. Season Lab
+### Season Lab
+Point-in-time Elo, remaining-season Monte Carlo, play-in/playoffs/Finals, historical game flips, paired deltas.
 
-- reconstruct a league at an as-of date;
-- simulate the remaining regular season;
-- play-in, playoffs, and Finals;
-- branch history by reversing one completed game;
-- compare paired futures with common random numbers;
-- inspect win, seed, playoff, and championship deltas.
+### Scenario Lab
+Composable alternate worlds using:
+- historical game flips;
+- RAPM-backed player absences;
+- RAPM-backed player-for-player trades;
+- game-specific strength adjustments;
+- league-wide win/playoff/title ripple;
+- point-in-time MVP ripple;
+- scenario-aware MVP future simulation;
+- reproducible share links.
 
-### 2. Matchup Lab
+### Matchup Lab
+Single-game and playoff-series simulation from a frozen as-of state.
 
-- choose two teams and an as-of date;
-- freeze the model at that point;
-- simulate a single game or best-of-3/5/7;
-- inspect series-win, length, and score distributions.
+### Timeline Lab
+Game-by-game rating and record evolution.
 
-### 3. Timeline Lab
+### Model Lab
+Chronological probabilistic evaluation and calibration for the deployed Elo baseline.
 
-- replay a team's rating and record game by game;
-- expose individual wins/losses as checkpoints;
-- keep the historical evolution visible rather than collapsing everything into a final-season number.
+### Awards Lab
+Point-in-time MVP race replay plus simulated remaining-season finishes.
 
-### 4. Model Lab
+### Player Impact
+Ridge RAPM, exposure diagnostics, and regularization paths over normalized lineup stints.
 
-- chronological Brier score, log loss, and accuracy;
-- calibration curve;
-- frozen baseline assumptions;
-- explicit promotion gate for more complex models.
+### Lineup Lab
+Observed-lineup evidence blended with additive RAPM priors; unseen units fall back to the prior rather than fabricated chemistry.
 
-## Next priority: Awards Lab
+### Leverage Lab
+Upcoming games ranked by the paired season distribution shift produced by each possible winner.
 
-Reuse the existing MVP project as historical research, not as production code.
+### Game Replay
+Historical score-state branching with paired simulations and season-ripple propagation.
 
-Rebuild around true point-in-time features:
+## Highest-value next work
 
-1. NBA player game logs / season-to-date aggregates.
-2. Team record and standings as of each date.
-3. Correct award eligibility rules for the relevant season.
-4. Rolling historical evaluation with no end-of-season leakage.
-5. Persist daily race snapshots.
-6. Compare ranking objectives vs calibrated award probabilities.
-7. Connect remaining-season simulation so a player's award distribution can change with simulated future performance/team context.
+### 1. Make player-aware scenarios more defensible
 
-The memorable interaction should be **Replay the Race**: scrub through a season and see when the model's leader changed, then simulate the remaining season from that exact date.
+Current RAPM-to-team-strength translation is useful but intentionally simple. Improve it only behind measurable checks:
 
-## Next priority: Player Impact
+- bootstrap or resample RAPM to expose uncertainty intervals;
+- recency weighting / rolling windows;
+- test offensive and defensive splits only if stable;
+- validate the RAPM-to-margin-to-Elo translation against held-out games;
+- model replacement minutes from actual rotation context rather than one scalar;
+- support trade + absence timing only after the semantics are explicit.
 
-Public event/lineup data is current through 2025-26, while modern raw optical tracking is not broadly public. Build around possessions and stints first.
+### 2. Move Game Replay toward real possession context
 
-Sequence:
+The current replay baseline conditions on score, clock, and pregame strength. The next meaningful upgrade is not cosmetic UI; it is a possession/state model using real play-by-play context:
 
-1. reconstruct possessions and five-man lineups;
-2. validate stint boundaries and score margins;
-3. ridge RAPM baseline;
-4. offensive / defensive split only if it is stable enough;
-5. uncertainty / shrinkage;
-6. rolling or recency weighting;
-7. promotion tests against simpler player/team priors.
+- possession ownership;
+- lineup on floor;
+- fouls / bonus;
+- timeout state when available;
+- possession outcome distributions;
+- lineup-aware continuation;
+- calibration against held-out historical states.
 
-This layer unlocks defensible player-aware counterfactuals in Season Lab.
+### 3. Unify scenario state across every lab
 
-## Then: Lineup Lab
+Scenario Lab is now the integration surface. Continue moving labs from isolated controls toward one shared scenario specification:
 
-Signature interaction: drag five players onto a court and estimate expected offense, defense, net rating, and uncertainty.
+- feed a Scenario into Matchup Lab;
+- open a Scenario from a Player Impact or Lineup selection;
+- let Game Replay create a scenario branch directly;
+- persist/share named scenarios without introducing accounts;
+- expose a machine-readable scenario result bundle.
 
-Do not report interaction/chemistry effects unless the sample-size and regularization story is defensible. Unseen lineups are a generalization problem, not a lookup table.
+### 4. Replace synthetic fallbacks with reproducible real snapshots where practical
 
-## Then: Game Replay
+Keep offline fixtures, but improve one-command acquisition and QA for:
+- NBA schedule;
+- player game logs;
+- normalized possession/lineup stints;
+- PlayByPlayV3 replay snapshots.
 
-Use public play-by-play / possession data to reconstruct historical game state.
+## Research / promotion gates
 
-Signature interaction: choose a game and timestamp/possession, change a lineup or event, then simulate from that state forward.
+A more sophisticated model gets deployed only if it either:
 
-This should remain a **model counterfactual**, not a causal claim that the edited event would have produced the displayed future.
+1. improves a declared held-out metric under chronological evaluation; or
+2. unlocks a qualitatively new interaction whose assumptions are explicit and testable.
 
-## Data direction
-
-Preferred public sources:
-
-- NBA Stats / `nba_api` for schedules, player aggregates, lineups, and PlayByPlayV3;
-- `pbpstats` where its possession and lineup reconstruction adds value;
-- frozen raw snapshots for reproducibility;
-- licensed or attribution-friendly mirrors only when they improve reproducibility and provenance.
-
-Raw modern player-tracking data should not be treated as a required dependency because it is not broadly available as a current public feed.
+Engineering complexity is not evidence of model quality.
 
 ## What not to build
 
 - generic NBA news/chatbot/RAG;
-- franchise contracts/draft/free-agency systems merely because agents can build them;
-- invented player ratings without validation;
-- fake precision around trades or injuries before player impact is modeled;
-- deep neural models promoted without beating the frozen baseline;
-- a giant stats dashboard whose outputs can be looked up elsewhere.
-
-## Promotion philosophy
-
-A more sophisticated model gets deployed only if it improves a declared held-out metric or unlocks a qualitatively new, validated interaction.
-
-Engineering complexity is not evidence of model quality.
+- salary-cap / draft / franchise-management systems just because they are large;
+- invented player ratings presented as truth;
+- opaque deep models without benchmark wins;
+- fake precision around trade fit or causal injury effects;
+- a giant stats dashboard whose outputs are easier to look up elsewhere.
