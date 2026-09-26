@@ -37,7 +37,7 @@ Single-game and playoff-series simulation from a frozen as-of state.
 Game-by-game rating and record evolution.
 
 ### Model Lab
-Chronological probabilistic evaluation and calibration for the deployed Elo baseline.
+Chronological probabilistic evaluation and calibration for the deployed Elo baseline, held-out parameter selection, and an experimental score-aware Elo family gate.
 
 ### Awards Lab
 Point-in-time MVP race replay plus simulated remaining-season finishes.
@@ -84,9 +84,9 @@ The current replay baseline conditions on score, clock, and pregame strength. Th
 
 Scenario Lab is now the integration surface. Continue moving labs from isolated controls toward one shared scenario specification:
 
-- feed a Scenario into Matchup Lab;
-- open a Scenario from a Player Impact or Lineup selection;
-- let Game Replay create a scenario branch directly;
+- continue expanding the current Scenario → Matchup and Scenario → game-specific closing-five drilldowns;
+- deepen Player Impact / Lineup handoffs with rotation-aware replacement assumptions;
+- extend the existing Game Replay → Scenario branch into possession-aware continuation;
 - persist/share named scenarios without introducing accounts;
 - expose a machine-readable scenario result bundle.
 
