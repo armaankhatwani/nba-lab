@@ -271,6 +271,13 @@
           <div class="panel replay-prob-panel"><div class="section-head"><div><span class="eyebrow">WIN PROBABILITY</span><h2>Baseline vs. altered state</h2></div><span id="replay-run-note">run a simulation</span></div><div id="replay-prob-bars" class="replay-prob-bars"></div></div>
           <div class="panel replay-margin-panel"><div class="section-head"><div><span class="eyebrow">FINAL MARGIN DISTRIBUTION</span><h2>Where does the game finish?</h2></div></div><div id="replay-margin-dist" class="replay-margin-dist"></div></div>
         </div>
+        <div class="panel replay-timeline-panel">
+          <div class="section-head"><div><span class="eyebrow">TURNING POINT ENGINE</span><h2>Where did the game actually swing?</h2><p>Every event is rescored with the same pregame-strength + score + clock model used by Game Replay.</p></div><span id="replay-timeline-status">loading trace…</span></div>
+          <div id="replay-timeline-chart" class="replay-timeline-chart"></div>
+          <div class="replay-turning-head"><span>BIGGEST EVENT-TO-EVENT SWINGS</span><small>click a moment to jump the scrubber there</small></div>
+          <div id="replay-turning-points" class="replay-turning-points"></div>
+          <p class="note">These are model-defined turning points, not causal attribution to a single play. The event is where the state changed; the model does not isolate all factors that produced it.</p>
+        </div>
         <div class="panel replay-season-panel" id="replay-season-panel" hidden>
           <div class="section-head"><div><span class="eyebrow">CROSS-LAB / SEASON RIPPLE</span><h2>How does this moment propagate beyond the game?</h2></div><div class="replay-season-actions"><span id="replay-season-note"></span><button class="ghost-button" id="replay-to-scenario" hidden>BRANCH OPPOSITE RESULT ↗</button></div></div>
           <p class="replay-season-formula">Expected season effect = change in home-win probability × difference between the forced-home-win and forced-away-win season branches. The branch button converts the game's opposite final winner into a deterministic Scenario world; it does not pretend the edited score state uniquely determines the final result.</p>
