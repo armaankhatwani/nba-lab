@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from math import log10
+from math import log10, sqrt
 from statistics import NormalDist
 
 from .analysis import TeamDelta, build_team_deltas
