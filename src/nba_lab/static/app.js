@@ -274,7 +274,9 @@ $('lineup-run').onclick=async()=>{
 
 async function loadImpact(){
   const alpha=Number($('impact-alpha').value||1000);
-  const d=await json(`/api/impact?alpha=${alpha}&limit=500`);
+  const params=new URLSearchParams({alpha:String(alpha),limit:'500'});
+  if($('impact-date').value)params.set('as_of',$('impact-date').value);
+  const d=await json('/api/impact?'+params);
   impactData=d;
   $('impact-stints').textContent=d.stints.toLocaleString();
   $('impact-games').textContent=d.games.toLocaleString();
@@ -282,7 +284,7 @@ async function loadImpact(){
   $('impact-rmse').textContent=d.weighted_rmse.toFixed(2);
   const kept=d.qa?.possessions_kept,seen=d.qa?.possessions_seen;
   const qa=(kept!=null&&seen)?` · kept ${kept.toLocaleString()}/${seen.toLocaleString()}`:'';
-  $('impact-source').textContent=(d.source?.kind==='normalized_snapshot'?'NORMALIZED REAL STINTS':'SYNTHETIC STINTS')+qa;
+  $('impact-source').textContent=(d.source?.kind==='normalized_snapshot'?'NORMALIZED REAL STINTS':'SYNTHETIC STINTS')+(d.as_of?' · AS OF '+d.as_of:' · FULL SNAPSHOT')+qa;
   renderImpactRows(d.players);
   drawImpactScatter(d.players);
   if(d.players[0])loadImpactPath(d.players[0].player_id);
@@ -293,14 +295,18 @@ function renderImpactRows(rows){
   $('impact-rows').innerHTML=filtered.map((p,i)=>`<tr data-impact-player="${p.player_id}">
     <td>${p.rank}</td><td>${p.player_name}</td><td>${p.team}</td>
     <td class="${p.impact_per_100>=0?'impact-positive':'impact-negative'}">${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(2)}</td>
+    <td class="impact-band">${p.lower_80>=0?'+':''}${p.lower_80.toFixed(2)} → ${p.upper_80>=0?'+':''}${p.upper_80.toFixed(2)}</td>
     <td>${Math.round(p.possessions).toLocaleString()}</td>
   </tr>`).join('');
   document.querySelectorAll('[data-impact-player]').forEach(row=>row.onclick=()=>{document.querySelectorAll('[data-impact-player]').forEach(x=>x.classList.remove('active'));row.classList.add('active');loadImpactPath(row.dataset.impactPlayer)});
 }
 $('impact-alpha').onchange=loadImpact;
+$('impact-date').onchange=loadImpact;
+$('impact-latest').onclick=()=>{$('impact-date').value='';loadImpact()};
 $('impact-search').oninput=()=>impactData&&renderImpactRows(impactData.players);
 async function loadImpactPath(playerId){
-  const d=await json(`/api/impact/${playerId}/path`);
+  const q=new URLSearchParams();if($('impact-date').value)q.set('as_of',$('impact-date').value);
+  const d=await json(`/api/impact/${playerId}/path`+(q.toString()?('?'+q):''));
   selectedImpactPlayerId=playerId;$('impact-detail-name').textContent=`${d.player.player_name} · ${d.player.team}`;$('impact-to-scenario').disabled=false;
   const current=impactData?.players.find(p=>p.player_id===playerId);
   $('impact-detail-meta').textContent=current?`Current α ${impactData.alpha.toFixed(0)} · RAPM ${current.impact_per_100>=0?'+':''}${current.impact_per_100.toFixed(2)} / 100 · approx 80% band ${current.lower_80>=0?'+':''}${current.lower_80.toFixed(2)} to ${current.upper_80>=0?'+':''}${current.upper_80.toFixed(2)} · ${Math.round(current.possessions).toLocaleString()} possessions`:'Regularization path';
