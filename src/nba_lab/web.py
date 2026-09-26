@@ -33,7 +33,7 @@ from .demo_impact import synthetic_impact_snapshot
 from .demo_replay import synthetic_replay_snapshots
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
-from .scenario import PlayerAbsence, TradeIntervention, build_scenario_inputs, simulate_scenario
+from .scenario import PlayerAbsence, TradeIntervention, build_scenario_inputs, scenario_roster_for_game, simulate_scenario
 from .teams import TEAMS
 from .timeline import team_timeline
 
@@ -197,6 +197,12 @@ class PlayerAbsenceScenarioRequest(BaseModel):
 
 class ScenarioMatchupRequest(PlayerAbsenceScenarioRequest):
     game_id: str
+
+
+class ScenarioLineupRequest(PlayerAbsenceScenarioRequest):
+    game_id: str
+    prior_possessions: float = Field(default=300.0, gt=0, le=5000)
+    top_k: int = Field(default=5, ge=1, le=12)
 
 
 def _scenario_absences(request: PlayerAbsenceScenarioRequest):
@@ -875,6 +881,100 @@ def scenario_matchup(request: ScenarioMatchupRequest):
             altered.team_a_series_probability - baseline.team_a_series_probability
         ),
         "warning": "The scenario adjustment changes the frozen pregame team-strength prior for this scheduled game; it is not a causal player-on/off game prediction.",
+    }
+
+
+@app.post("/api/scenario/lineups")
+def scenario_lineups(request: ScenarioLineupRequest):
+    if not request.absences and not request.flipped_game_ids and not request.trades:
+        raise HTTPException(422, "scenario requires at least one intervention")
+
+    game = next((row for row in GAMES if row.game_id == request.game_id), None)
+    if game is None:
+        raise HTTPException(404, f"Unknown scheduled game: {request.game_id}")
+    if game.game_date < request.as_of:
+        raise HTTPException(422, "scenario lineup game must be on or after the as-of date")
+
+    try:
+        snapshot = _impact_snapshot_as_of(request.as_of)
+        rapm = _impact_result(float(request.alpha), request.as_of)
+        rapm_ids = {row.player_id for row in rapm.players}
+        inputs = build_scenario_inputs(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            rapm,
+            _scenario_absences(request),
+            flipped_game_ids=request.flipped_game_ids,
+            trades=_scenario_trades(request),
+        )
+
+        sides = []
+        for team in (game.home_team, game.away_team):
+            roster = scenario_roster_for_game(
+                IMPACT_SNAPSHOT,
+                inputs,
+                team,
+                game.game_id,
+            )
+            available = tuple(
+                player_id
+                for player_id in roster.player_ids
+                if player_id in snapshot.players and player_id in rapm_ids
+            )
+            lineups = optimize_lineups(
+                snapshot,
+                rapm,
+                available,
+                prior_possessions=request.prior_possessions,
+                top_k=request.top_k,
+            )
+
+            def serialize_lineup(row):
+                return {
+                    **asdict(row),
+                    "player_meta": [
+                        {
+                            "player_id": player_id,
+                            "player_name": IMPACT_SNAPSHOT.players[player_id].player_name,
+                            "original_team": IMPACT_SNAPSHOT.players[player_id].team,
+                            "scenario_team": team,
+                        }
+                        for player_id in row.players
+                    ],
+                }
+
+            sides.append({
+                "team": team,
+                "roster": {
+                    **asdict(roster),
+                    "player_meta": [
+                        {
+                            "player_id": player_id,
+                            "player_name": IMPACT_SNAPSHOT.players[player_id].player_name,
+                            "original_team": IMPACT_SNAPSHOT.players[player_id].team,
+                            "scenario_team": team,
+                        }
+                        for player_id in available
+                    ],
+                },
+                "lineups": [serialize_lineup(row) for row in lineups],
+            })
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    return {
+        "game": {
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+        },
+        "as_of": request.as_of.isoformat(),
+        "alpha": request.alpha,
+        "prior_possessions": request.prior_possessions,
+        "teams": sides,
+        "warning": "Scenario rosters apply trade swaps and game-specific absences. New combinations without historical possessions fall back toward the RAPM prior; roles, fit, and minute feasibility are not optimized.",
     }
 
 
