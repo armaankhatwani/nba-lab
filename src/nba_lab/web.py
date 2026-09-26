@@ -167,6 +167,7 @@ class PlayerAbsenceScenarioRequest(BaseModel):
     seed: int = 2026
     alpha: float = Field(default=1000.0, gt=0, le=10000)
     absences: list[PlayerAbsenceRequest]
+    flipped_game_ids: list[str] = []
 
 
 def _serialize(result):
@@ -612,11 +613,30 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
                 )
                 for row in request.absences
             ],
+            flipped_game_ids=request.flipped_game_ids,
             trials=request.trials,
             seed=request.seed,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    altered_history = list(GAMES)
+    for game_id in request.flipped_game_ids:
+        altered_history, _ = flip_game(altered_history, game_id)
+    award_before = build_award_race(GAMES, AWARD_LOGS, request.as_of)
+    award_after = build_award_race(altered_history, AWARD_LOGS, request.as_of)
+    left = {row.player_id: row for row in award_before.candidates}
+    right = {row.player_id: row for row in award_after.candidates}
+    award_ripple = []
+    for player_id in sorted(set(left) & set(right)):
+        before, after = left[player_id], right[player_id]
+        award_ripple.append({
+            "player_id": player_id,
+            "player_name": before.player_name,
+            "team": before.team,
+            "race_score_delta": after.race_score - before.race_score,
+            "race_share_delta": after.race_share - before.race_share,
+        })
+    award_ripple.sort(key=lambda row: abs(row["race_score_delta"]), reverse=True)
     return {
         "as_of": request.as_of.isoformat(),
         "trials": request.trials,
@@ -626,7 +646,9 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
         "altered": _serialize(result.altered),
         "deltas": [asdict(row) for row in result.deltas],
         "player_absences": [asdict(row) for row in result.player_absences],
-        "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games.",
+        "historical_flips": [asdict(row) for row in result.historical_flips],
+        "award_ripple": award_ripple[:8],
+        "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games. Historical flips rebuild point-in-time team and award context.",
     }
 
 
