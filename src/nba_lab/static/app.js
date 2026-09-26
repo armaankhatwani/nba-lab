@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,replayLastResult=null,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null,pendingScenarioFlipGameId=null;
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],lineupScenarioContext=null,replayGames=[],replayData=null,replayIndex=0,replayLastResult=null,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null,pendingScenarioFlipGameId=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
@@ -291,6 +291,18 @@ $('replay-to-scenario').onclick=function(){
   openView('scenario');
 };
 
+
+function clearLineupScenarioContext(){
+  lineupScenarioContext=null;
+  $('lineup-context').hidden=true;
+  $('lineup-context').innerHTML='';
+}
+function setLineupScenarioContext(team,asOf){
+  lineupScenarioContext={team:team,as_of:asOf};
+  $('lineup-context').hidden=false;
+  $('lineup-context').innerHTML='<strong>SCENARIO ROSTER · '+team+'</strong><span>Loaded from Scenario Lab as of '+asOf+'. Team labels on Lineup A reflect the altered roster, not the original snapshot metadata.</span>';
+}
+
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
   const params=new URLSearchParams({alpha:String(alpha)});
@@ -327,7 +339,7 @@ function renderLineupSlots(){
   document.querySelectorAll('[data-remove-player]').forEach(button=>button.onclick=()=>{
     const arr=button.dataset.removeSide==='a'?lineupA:lineupB;
     const idx=arr.indexOf(button.dataset.removePlayer);if(idx>=0)arr.splice(idx,1);
-    resetLineupResult();renderLineupSlots();renderLineupPool();
+    clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool();
   });
 }
 function renderLineupPool(){
@@ -346,7 +358,7 @@ function addLineupPlayer(side,pid){
   if(lineupA.includes(pid)||lineupB.includes(pid))return;
   const arr=side==='a'?lineupA:lineupB;
   if(arr.length>=5)return;
-  arr.push(pid);resetLineupResult();renderLineupSlots();renderLineupPool();
+  arr.push(pid);clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool();
 }
 function resetLineupResult(){
   $('lineup-a-value').textContent='—';$('lineup-b-value').textContent='—';$('lineup-margin').textContent='—';
@@ -356,11 +368,11 @@ function resetLineupResult(){
 }
 $('lineup-search').oninput=renderLineupPool;
 $('lineup-team-filter').onchange=renderLineupPool;
-$('lineup-alpha').onchange=async()=>{await loadLineup();resetLineupResult();resetLineupOptimizer()};
-$('lineup-date').onchange=async()=>{await loadLineup();resetLineupResult();resetLineupOptimizer()};
-$('lineup-latest').onclick=async()=>{$('lineup-date').value='';await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-alpha').onchange=async()=>{clearLineupScenarioContext();await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-date').onchange=async()=>{clearLineupScenarioContext();await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-latest').onclick=async()=>{$('lineup-date').value='';clearLineupScenarioContext();await loadLineup();resetLineupResult();resetLineupOptimizer()};
 $('lineup-prior').onchange=()=>{resetLineupResult();resetLineupOptimizer()};
-$('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;resetLineupResult();renderLineupSlots();renderLineupPool()};
+$('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;clearLineupScenarioContext();resetLineupResult();renderLineupSlots();renderLineupPool()};
 $('lineup-run').onclick=async()=>{
   if(lineupA.length!==5||lineupB.length!==5){$('lineup-margin-note').textContent='both sides need five unique players';return}
   const button=$('lineup-run');button.disabled=true;
