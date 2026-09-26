@@ -2,22 +2,22 @@
 
 ## Purpose
 
-NBA Lab is a point-in-time **model counterfactual** system. It reconstructs the information available before an as-of date, simulates the remaining schedule many times, and compares paired alternate histories.
+NBA Lab is a point-in-time **model counterfactual** system. It reconstructs information available at an as-of date, applies explicit interventions, simulates alternate futures, and compares the resulting distributions.
 
 It is not a claim about what *would actually have happened*. Outputs are conditional on the model and its assumptions.
 
-## Current deployed baseline
+## Team-strength baseline
 
-The deployed baseline is intentionally simple: team Elo updated only from completed games strictly before the selected as-of date.
+The deployed season baseline is intentionally simple:
 
-- teams begin at 1500;
+- teams begin at 1500 Elo;
 - home-court advantage is 65 Elo points;
 - K-factor is 20;
-- future simulated results do **not** recursively update Elo inside a Monte Carlo path;
-- all future games use strength frozen at the selected date;
-- paired comparisons reuse the same random seed/common random numbers to reduce noise in the delta.
+- team strength is frozen at the selected cutoff during a Monte Carlo path;
+- future simulated results do not recursively update Elo;
+- paired comparisons reuse the same seed/common random stream to reduce Monte Carlo noise.
 
-A more complex model is not promoted merely because it is more sophisticated. It must beat this frozen baseline on leakage-safe chronological evaluation.
+A more complex model is not promoted merely because it is more sophisticated. It must beat the baseline chronologically or unlock a new validated interaction.
 
 ## Season and postseason simulation
 
@@ -25,27 +25,63 @@ Each trial simulates the remaining regular season, conference ordering, play-in,
 
 Known approximations:
 
-1. Official NBA multi-step regular-season tiebreakers are not implemented yet; exact win ties use randomized resolution.
-2. Postseason team strength is frozen at the selected as-of date. There is no injury, fatigue, matchup, rotation, or in-series learning layer yet.
-3. Finals home court uses the better simulated regular-season record, with random resolution on a tie.
-4. The playoff engine is a forecasting layer, not a roster-management or salary-cap simulator.
+1. Official multi-step NBA regular-season tiebreakers are not fully implemented; exact win ties use randomized resolution.
+2. Postseason strength is frozen at the selected cutoff.
+3. Injuries, fatigue, travel, matchup effects, rotation changes, and in-series learning are not part of the baseline.
+4. Finals home court uses the better simulated regular-season record, with random resolution on a tie.
 
-## Counterfactuals
+## Counterfactual layers
 
-### Flip a game
+### Historical game flip
 
-A completed game before the as-of date can be reversed. NBA Lab rebuilds the historical Elo state from that altered record and simulates the future using the same random stream as the real-history branch.
+A completed game before the cutoff can be reversed. NBA Lab rebuilds the historical Elo state from the altered result and reuses paired randomness for future comparisons.
 
-This answers: **"Under this model, how does the forecast distribution change if this result is reversed?"**
+### Player impact / RAPM
 
-It does not establish causality.
+Player Impact fits weighted ridge adjusted plus-minus from normalized five-man lineup stints. It attempts to separate a player's association with point differential from the other nine players on the floor.
 
-### Research strength adjustment
+RAPM is not a causal player-value truth. Single-season estimates can be noisy and are sensitive to stint quality, regularization, exposure, and lineup connectivity.
 
-A manual Elo adjustment is an engineering/research control. It is explicitly **not** described as adding/removing a player, making a trade, or changing a rotation.
+### Player absence
 
-Real player-aware scenarios are gated on a separately validated player-impact model.
+Scenario Lab compares the player's RAPM with an explicit replacement RAPM, scales the gap by expected minutes, treats that as an expected per-game margin change, and maps the margin shift into the Elo probability scale. The adjustment applies only to the next stated number of scheduled games.
+
+This does not model a real replacement rotation, role redistribution, fatigue, or strategic adaptation.
+
+### Player-for-player trade
+
+A trade swaps the modeled RAPM contribution of two players across their teams for the remaining schedule at a stated minutes assumption.
+
+The current trade model does **not** include salary, fit, usage, role changes, chemistry, positional constraints, bench effects, or nonlinear lineup interactions. It is a controlled player-impact scenario, not a trade-value oracle.
+
+A player cannot simultaneously be traded and absent in one scenario yet because the timing semantics are not defined.
+
+### Lineup estimates
+
+Lineup Lab combines an additive RAPM prior with observed lineup net rating using possession-weighted shrinkage. An unseen lineup falls back to the prior. It does not invent a chemistry term.
+
+### Game Replay
+
+Game Replay conditions on historical score state, time remaining, pregame team strength, and historical margin variance. It simulates a final-margin distribution and compares edited score states with matched randomness.
+
+This is not yet a possession-level causal model. Current replay output should be interpreted as a game-state baseline.
+
+### Leverage
+
+Leverage Lab forces each possible winner of an upcoming game in paired season simulations and measures how much the league-wide playoff/title distributions move. It measures model sensitivity to the result, not real-world importance in an absolute causal sense.
+
+## Awards model
+
+Awards Lab builds a point-in-time MVP research score from season-to-date player/team information and can bootstrap remaining player-game lines while simulating future team results.
+
+"Leader probability" is the fraction of simulated endings in which the research score finishes first. It is **not** a calibrated probability of how NBA voters will vote.
+
+Scenario-aware award futures can incorporate:
+- altered historical results;
+- game-specific team-strength adjustments;
+- explicit missed games;
+- traded-team context for shared player identities.
 
 ## Promotion gates
 
-Future team/player/lineup/possession models should be evaluated chronologically against this baseline with proper probabilistic metrics such as Brier score and log loss. No same-season future information may enter an as-of feature set.
+Future team/player/lineup/possession models should be evaluated chronologically with leakage-safe metrics appropriate to the task. Where a component does not have a clean predictive benchmark yet, it must remain labeled as a research assumption rather than being promoted through presentation alone.
