@@ -10,7 +10,7 @@ from nba_lab.replay_lineup import build_replay_lineup_intervention
 
 def snapshot():
     players = {}
-    for i in range(1, 7):
+    for i in range(1, 8):
         players[f"A{i}"] = ImpactPlayer(f"A{i}", f"A{i}", "A")
         players[f"B{i}"] = ImpactPlayer(f"B{i}", f"B{i}", "B")
     stints = (
@@ -92,6 +92,6 @@ def test_replay_lineup_requires_exactly_one_swap():
         build_replay_lineup_intervention(
             s, rapm, event(), "home", "A",
             ("A1","A2","A3","A4","A5"),
-            ("A1","A2","A3","A5","A6"),
+            ("A1","A2","A3","A6","A7"),
             prior_possessions=100,
         )
