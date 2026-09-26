@@ -42,6 +42,7 @@ from .scenario import (
 )
 from .teams import TEAMS
 from .timeline import team_timeline
+from .world import simulate_one_world
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -870,6 +871,43 @@ def run_scenario(request: ScenarioRequest):
         "affected_games": affected_games,
         "award_ripple": award_ripple[:8],
         "warning": "Scenario outputs are model counterfactuals. Player interventions use RAPM association estimates; historical branches rebuild point-in-time context; forced future results are deterministic assumptions inside every simulated path.",
+    }
+
+
+@app.post("/api/scenario/world")
+def scenario_world(request: ScenarioRequest, world_seed: int = 2026):
+    try:
+        inputs = build_scenario_inputs(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            _impact_result(float(request.alpha), request.as_of),
+            _scenario_absences(request),
+            flipped_game_ids=request.flipped_game_ids,
+            future_results=_scenario_future_results(request),
+            trades=_scenario_trades(request),
+        )
+        world = simulate_one_world(
+            list(inputs.altered_games),
+            request.as_of,
+            seed=world_seed,
+            rating_adjustments=inputs.team_rating_adjustments,
+            game_rating_adjustments=inputs.game_rating_adjustments,
+            forced_winners=inputs.forced_winners,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    return {
+        **asdict(world),
+        "team_rating_adjustments": inputs.team_rating_adjustments,
+        "interventions": {
+            "historical_flips": [asdict(row) for row in inputs.historical_flips],
+            "future_results": [asdict(row) for row in inputs.future_results],
+            "player_absences": [asdict(row) for row in inputs.player_absences],
+            "trades": [asdict(row) for row in inputs.trades],
+        },
+        "warning": "This is one sampled model future, not a forecast distribution. Change the seed to reroll another internally consistent world.",
     }
 
 
