@@ -170,6 +170,18 @@
       <section class="view" id="view-model">
         <div class="metric-grid model-metrics"><article class="panel metric"><span>BRIER</span><strong id="md-brier">—</strong><small>lower is better</small></article><article class="panel metric"><span>LOG LOSS</span><strong id="md-logloss">—</strong><small>probabilistic penalty</small></article><article class="panel metric"><span>ACCURACY</span><strong id="md-accuracy">—</strong><small>0.5 decision threshold</small></article><article class="panel metric"><span>GAMES</span><strong id="md-games">—</strong><small>chronological evaluations</small></article></div>
         <div class="model-grid"><div class="panel chart-panel"><div class="section-head"><div><span class="eyebrow">CALIBRATION</span><h2>Predicted vs. observed</h2></div><span>perfect calibration lies on the diagonal</span></div><div id="calibration-chart" class="chart"></div></div><div class="panel methodology"><span class="eyebrow">DEPLOYED BASELINE</span><h2 id="model-name">Frozen Elo baseline</h2><div class="spec-row"><span>Base rating</span><strong id="model-base">1500</strong></div><div class="spec-row"><span>K-factor</span><strong id="model-k">20</strong></div><div class="spec-row"><span>Home advantage</span><strong id="model-home">65</strong></div><hr><p id="promotion-rule">More complex models must beat this baseline chronologically before promotion.</p><div class="warning-box"><strong>Known gaps</strong><span>Official tiebreakers, injuries, player availability, rotations, matchup effects, and possession context are not deployed yet.</span></div></div></div>
+        <div class="panel elo-surface-panel">
+          <div class="section-head"><div><span class="eyebrow">HELD-OUT PARAMETER SURFACE</span><h2>Does the frozen baseline actually earn its place?</h2><p>K-factor and home advantage are tuned only on the earlier chronological slice, then judged on a later untouched holdout.</p></div><span id="elo-surface-status">loading grid…</span></div>
+          <div class="metric-grid elo-surface-metrics">
+            <article class="metric"><span>SPLIT</span><strong id="elo-split">—</strong><small>train → holdout</small></article>
+            <article class="metric"><span>BASELINE HOLDOUT</span><strong id="elo-base-holdout">—</strong><small>Brier · K20 / H65</small></article>
+            <article class="metric"><span>TRAIN-SELECTED</span><strong id="elo-selected">—</strong><small>best earlier-slice candidate</small></article>
+            <article class="metric"><span>HOLDOUT DELTA</span><strong id="elo-holdout-delta">—</strong><small>selected − baseline</small></article>
+          </div>
+          <div id="elo-surface-grid" class="elo-surface-grid"></div>
+          <div id="elo-surface-verdict" class="elo-surface-verdict"></div>
+          <p class="note">Lower Brier is better. The outlined baseline remains deployed unless repeated leakage-safe evaluation justifies promotion; one holdout win is not enough.</p>
+        </div>
       </section>
 
       <section class="view" id="view-awards">
