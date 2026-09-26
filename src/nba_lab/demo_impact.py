@@ -7,6 +7,12 @@ from .impact_source import ImpactPlayer, ImpactSnapshot
 
 
 _TEAMS=("NYK","BOS","OKC","DEN")
+_STAR_IDENTITIES = {
+    "NYK": ("demo-brunson", "Jalen Brunson"),
+    "BOS": ("1628369", "Jayson Tatum"),
+    "OKC": ("1628983", "Shai Gilgeous-Alexander"),
+    "DEN": ("203999", "Nikola Jokic"),
+}
 
 
 def synthetic_impact_snapshot(seed:int=2026)->ImpactSnapshot:
@@ -16,8 +22,12 @@ def synthetic_impact_snapshot(seed:int=2026)->ImpactSnapshot:
     latent={}
     for t_i,team in enumerate(_TEAMS):
         for i in range(8):
-            pid=f"demo-{team}-{i+1}"
-            players[pid]=ImpactPlayer(pid,f"Demo {team} Player {i+1}",team)
+            if i == 0:
+                pid, name = _STAR_IDENTITIES[team]
+            else:
+                pid=f"demo-{team}-{i+1}"
+                name=f"Demo {team} Player {i+1}"
+            players[pid]=ImpactPlayer(pid,name,team)
             # Enough variation to make shrinkage and recovery visible.
             latent[pid]=3.5-0.85*i+0.25*t_i
 
