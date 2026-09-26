@@ -303,7 +303,7 @@ async function loadImpactPath(playerId){
   const d=await json(`/api/impact/${playerId}/path`);
   selectedImpactPlayerId=playerId;$('impact-detail-name').textContent=`${d.player.player_name} · ${d.player.team}`;$('impact-to-scenario').disabled=false;
   const current=impactData?.players.find(p=>p.player_id===playerId);
-  $('impact-detail-meta').textContent=current?`Current α ${impactData.alpha.toFixed(0)} · RAPM ${current.impact_per_100>=0?'+':''}${current.impact_per_100.toFixed(2)} / 100 · ${Math.round(current.possessions).toLocaleString()} possessions`:'Regularization path';
+  $('impact-detail-meta').textContent=current?`Current α ${impactData.alpha.toFixed(0)} · RAPM ${current.impact_per_100>=0?'+':''}${current.impact_per_100.toFixed(2)} / 100 · approx 80% band ${current.lower_80>=0?'+':''}${current.lower_80.toFixed(2)} to ${current.upper_80>=0?'+':''}${current.upper_80.toFixed(2)} · ${Math.round(current.possessions).toLocaleString()} possessions`:'Regularization path';
   drawImpactPath(d.points);
 }
 function drawImpactPath(points){
@@ -317,7 +317,7 @@ function drawImpactScatter(players){
   const el=$('impact-scatter');if(!players.length){el.innerHTML='';return}
   const W=900,H=300,pad=42;const xs=players.map(p=>p.possessions),ys=players.map(p=>p.impact_per_100);const maxX=Math.max(...xs),minY=Math.min(...ys)-.5,maxY=Math.max(...ys)+.5;
   const x=v=>pad+(W-2*pad)*(v/Math.max(1,maxX));const y=v=>H-pad-(H-2*pad)*((v-minY)/Math.max(.01,maxY-minY));const exposureCut=maxX*.25;
-  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="zero" x1="${pad}" y1="${y(0)}" x2="${W-pad}" y2="${y(0)}"/><line class="grid" x1="${x(exposureCut)}" y1="${pad}" x2="${x(exposureCut)}" y2="${H-pad}"/>${players.map(p=>`<circle class="scatter-point ${p.possessions<exposureCut?'low-sample':''}" cx="${x(p.possessions)}" cy="${y(p.impact_per_100)}" r="5"><title>${p.player_name} · ${p.team} · RAPM ${p.impact_per_100.toFixed(2)} · ${Math.round(p.possessions)} poss</title></circle>`).join('')}<text x="${pad}" y="${H-8}">0 poss</text><text x="${W-pad-50}" y="${H-8}">${Math.round(maxX)} poss</text><text x="3" y="${y(maxY)+3}">${maxY.toFixed(1)}</text><text x="3" y="${y(minY)+3}">${minY.toFixed(1)}</text></svg>`;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><line class="zero" x1="${pad}" y1="${y(0)}" x2="${W-pad}" y2="${y(0)}"/><line class="grid" x1="${x(exposureCut)}" y1="${pad}" x2="${x(exposureCut)}" y2="${H-pad}"/>${players.map(p=>`<circle class="scatter-point ${p.possessions<exposureCut?'low-sample':''}" cx="${x(p.possessions)}" cy="${y(p.impact_per_100)}" r="5"><title>${p.player_name} · ${p.team} · RAPM ${p.impact_per_100.toFixed(2)} · 80% ${p.lower_80.toFixed(2)} to ${p.upper_80.toFixed(2)} · ${Math.round(p.possessions)} poss</title></circle>`).join('')}<text x="${pad}" y="${H-8}">0 poss</text><text x="${W-pad-50}" y="${H-8}">${Math.round(maxX)} poss</text><text x="3" y="${y(maxY)+3}">${maxY.toFixed(1)}</text><text x="3" y="${y(minY)+3}">${minY.toFixed(1)}</text></svg>`;
 }
 
 
@@ -658,13 +658,13 @@ function renderScenario(d){
   const absenceCards=d.player_absences.map(function(e){
     return '<div class="scenario-effect"><span>'+e.player_name+' · '+e.team+' · '+e.games_missed+' games</span>'
       +'<strong>'+(e.margin_delta_per_game>=0?'+':'')+e.margin_delta_per_game.toFixed(2)+' pts/game → '+(e.elo_delta_per_game>=0?'+':'')+e.elo_delta_per_game.toFixed(0)+' Elo</strong>'
-      +'<small>RAPM '+(e.impact_per_100>=0?'+':'')+e.impact_per_100.toFixed(2)+' → replacement '+(e.replacement_impact_per_100>=0?'+':'')+e.replacement_impact_per_100.toFixed(2)+' · '+e.minutes_per_game.toFixed(0)+' MPG · '+e.affected_game_ids.length+' scheduled games affected</small></div>';
+      +'<small>RAPM '+(e.impact_per_100>=0?'+':'')+e.impact_per_100.toFixed(2)+' (80% '+e.impact_lower_80.toFixed(2)+' to '+e.impact_upper_80.toFixed(2)+') → replacement '+(e.replacement_impact_per_100>=0?'+':'')+e.replacement_impact_per_100.toFixed(2)+' · '+e.minutes_per_game.toFixed(0)+' MPG · '+e.affected_game_ids.length+' scheduled games affected<br>margin band '+e.margin_delta_low_80.toFixed(2)+' to '+e.margin_delta_high_80.toFixed(2)+' · Elo band '+e.elo_delta_low_80.toFixed(0)+' to '+e.elo_delta_high_80.toFixed(0)+'</small></div>';
   });
   const tradeCards=(d.trades||[]).map(function(e){
     return '<div class="scenario-effect"><span>TRADE · '+e.team_a+' ⇄ '+e.team_b+'</span>'
       +'<strong>'+e.player_a_name+' ⇄ '+e.player_b_name+'</strong>'
-      +'<small>'+e.team_a+': '+(e.team_a_margin_delta_per_game>=0?'+':'')+e.team_a_margin_delta_per_game.toFixed(2)+' pts/game · '+(e.team_a_elo_delta_per_game>=0?'+':'')+e.team_a_elo_delta_per_game.toFixed(0)+' Elo · '+e.team_a_affected_games.length+' games<br>'
-      +e.team_b+': '+(e.team_b_margin_delta_per_game>=0?'+':'')+e.team_b_margin_delta_per_game.toFixed(2)+' pts/game · '+(e.team_b_elo_delta_per_game>=0?'+':'')+e.team_b_elo_delta_per_game.toFixed(0)+' Elo · '+e.team_b_affected_games.length+' games</small></div>';
+      +'<small>'+e.team_a+': '+(e.team_a_margin_delta_per_game>=0?'+':'')+e.team_a_margin_delta_per_game.toFixed(2)+' pts/game ('+e.team_a_margin_delta_low_80.toFixed(2)+' to '+e.team_a_margin_delta_high_80.toFixed(2)+') · '+(e.team_a_elo_delta_per_game>=0?'+':'')+e.team_a_elo_delta_per_game.toFixed(0)+' Elo · '+e.team_a_affected_games.length+' games<br>'
+      +e.team_b+': '+(e.team_b_margin_delta_per_game>=0?'+':'')+e.team_b_margin_delta_per_game.toFixed(2)+' pts/game ('+e.team_b_margin_delta_low_80.toFixed(2)+' to '+e.team_b_margin_delta_high_80.toFixed(2)+') · '+(e.team_b_elo_delta_per_game>=0?'+':'')+e.team_b_elo_delta_per_game.toFixed(0)+' Elo · '+e.team_b_affected_games.length+' games</small></div>';
   });
   $('scenario-effects').innerHTML=historyCards.concat(tradeCards,absenceCards).join('');
   renderScenarioAwardRipple(d);
