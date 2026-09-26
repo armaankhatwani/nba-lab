@@ -31,6 +31,7 @@ def simulate_matchup(
     trials: int = 10_000,
     best_of: int = 7,
     seed: int = 2026,
+    rating_adjustments: dict[str, float] | None = None,
     model: EloModel | None = None,
 ) -> MatchupResult:
     if team_a == team_b:
@@ -42,6 +43,8 @@ def simulate_matchup(
 
     model = model or EloModel()
     ratings = model.fit_as_of(games, as_of)
+    adjustments = rating_adjustments or {}
+    ratings = {team: rating + adjustments.get(team, 0.0) for team, rating in ratings.items()}
     if team_a not in ratings or team_b not in ratings:
         raise ValueError("both teams must exist in the game history")
 
