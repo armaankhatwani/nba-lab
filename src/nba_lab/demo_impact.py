@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 import random
 
 from .impact import Stint
@@ -37,6 +38,7 @@ def synthetic_impact_snapshot(seed:int=2026)->ImpactSnapshot:
         for away in _TEAMS[home_i+1:]:
             for repeat in range(6):
                 game_id=f"impact-demo-{game_no:03d}"
+                game_date=date(2025,10,21)+timedelta(days=2*(game_no-1))
                 game_no+=1
                 home_pool=[p for p,m in players.items() if m.team==home]
                 away_pool=[p for p,m in players.items() if m.team==away]
@@ -52,6 +54,7 @@ def synthetic_impact_snapshot(seed:int=2026)->ImpactSnapshot:
                         point_diff=float(point_diff),
                         home_players=hp,
                         away_players=ap,
+                        game_date=game_date,
                     ))
     return ImpactSnapshot(
         stints=tuple(stints),
