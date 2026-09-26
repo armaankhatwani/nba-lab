@@ -149,3 +149,4 @@ def test_trade_translation_carries_symmetric_impact_uncertainty():
     assert effect.impact_difference_standard_error >= 0
     assert effect.team_a_margin_delta_low_80 <= effect.team_a_margin_delta_per_game <= effect.team_a_margin_delta_high_80
     assert effect.team_b_margin_delta_low_80 <= effect.team_b_margin_delta_per_game <= effect.team_b_margin_delta_high_80
+

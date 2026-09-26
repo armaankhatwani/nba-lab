@@ -198,8 +198,14 @@ function renderReplaySeasonRipple(ripple){
 
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
-  const d=await json(`/api/lineup/players?alpha=${alpha}`);
+  const params=new URLSearchParams({alpha:String(alpha)});
+  if($('lineup-date').value)params.set('as_of',$('lineup-date').value);
+  const d=await json('/api/lineup/players?'+params);
   lineupPool=d.players||[];
+  const available=new Set(lineupPool.map(function(p){return p.player_id}));
+  lineupA=lineupA.filter(function(pid){return available.has(pid)});
+  lineupB=lineupB.filter(function(pid){return available.has(pid)});
+  $('lineup-source').textContent=d.as_of?('AS OF '+d.as_of):'FULL SNAPSHOT';
   const teams=[...new Set(lineupPool.map(p=>p.team))].sort();
   if($('lineup-team-filter').options.length<=1){
     teams.forEach(team=>{const o=document.createElement('option');o.value=team;o.textContent=team;$('lineup-team-filter').append(o)});
@@ -250,6 +256,8 @@ function resetLineupResult(){
 $('lineup-search').oninput=renderLineupPool;
 $('lineup-team-filter').onchange=renderLineupPool;
 $('lineup-alpha').onchange=async()=>{await loadLineup();resetLineupResult()};
+$('lineup-date').onchange=async()=>{await loadLineup();resetLineupResult()};
+$('lineup-latest').onclick=async()=>{$('lineup-date').value='';await loadLineup();resetLineupResult()};
 $('lineup-prior').onchange=resetLineupResult;
 $('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;resetLineupResult();renderLineupSlots();renderLineupPool()};
 $('lineup-run').onclick=async()=>{
@@ -257,14 +265,15 @@ $('lineup-run').onclick=async()=>{
   const button=$('lineup-run');button.disabled=true;
   try{
     const d=await json('/api/lineup/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      lineup_a:lineupA,lineup_b:lineupB,alpha:Number($('lineup-alpha').value),prior_possessions:Number($('lineup-prior').value)
+      lineup_a:lineupA,lineup_b:lineupB,alpha:Number($('lineup-alpha').value),prior_possessions:Number($('lineup-prior').value),
+      as_of:$('lineup-date').value||null
     })});
     const a=d.lineup_a,b=d.lineup_b,m=d.neutral_margin_per_100;
     $('lineup-a-value').textContent=`${a.blended_net_rating>=0?'+':''}${a.blended_net_rating.toFixed(1)}`;
     $('lineup-b-value').textContent=`${b.blended_net_rating>=0?'+':''}${b.blended_net_rating.toFixed(1)}`;
     $('lineup-margin').textContent=`${m>=0?'+':''}${m.toFixed(1)}`;
     const winner=m>=0?'Lineup A':'Lineup B';
-    $('lineup-margin-note').textContent=`${winner} model edge per 100 possessions`;
+    $('lineup-margin-note').textContent=`${winner} model edge per 100 possessions${d.as_of?' · as of '+d.as_of:''}`;
     const meta=lineup=>lineup.observed_possessions>0
       ? `<span class="lineup-seen">OBSERVED UNIT</span> · ${Math.round(lineup.observed_possessions)} poss · raw ${lineup.observed_net_rating.toFixed(1)} · ${Math.round(100*lineup.observed_weight)}% empirical weight`
       : `<span class="lineup-unseen">UNSEEN UNIT</span> · additive RAPM prior only`;
@@ -274,7 +283,9 @@ $('lineup-run').onclick=async()=>{
 
 async function loadImpact(){
   const alpha=Number($('impact-alpha').value||1000);
-  const d=await json(`/api/impact?alpha=${alpha}&limit=500`);
+  const params=new URLSearchParams({alpha:String(alpha),limit:'500'});
+  if($('impact-date').value)params.set('as_of',$('impact-date').value);
+  const d=await json('/api/impact?'+params);
   impactData=d;
   $('impact-stints').textContent=d.stints.toLocaleString();
   $('impact-games').textContent=d.games.toLocaleString();
@@ -282,7 +293,7 @@ async function loadImpact(){
   $('impact-rmse').textContent=d.weighted_rmse.toFixed(2);
   const kept=d.qa?.possessions_kept,seen=d.qa?.possessions_seen;
   const qa=(kept!=null&&seen)?` · kept ${kept.toLocaleString()}/${seen.toLocaleString()}`:'';
-  $('impact-source').textContent=(d.source?.kind==='normalized_snapshot'?'NORMALIZED REAL STINTS':'SYNTHETIC STINTS')+qa;
+  $('impact-source').textContent=(d.source?.kind==='normalized_snapshot'?'NORMALIZED REAL STINTS':'SYNTHETIC STINTS')+(d.as_of?' · AS OF '+d.as_of:' · FULL SNAPSHOT')+qa;
   renderImpactRows(d.players);
   drawImpactScatter(d.players);
   if(d.players[0])loadImpactPath(d.players[0].player_id);
@@ -293,14 +304,18 @@ function renderImpactRows(rows){
   $('impact-rows').innerHTML=filtered.map((p,i)=>`<tr data-impact-player="${p.player_id}">
     <td>${p.rank}</td><td>${p.player_name}</td><td>${p.team}</td>
     <td class="${p.impact_per_100>=0?'impact-positive':'impact-negative'}">${p.impact_per_100>=0?'+':''}${p.impact_per_100.toFixed(2)}</td>
+    <td class="impact-band">${p.lower_80>=0?'+':''}${p.lower_80.toFixed(2)} → ${p.upper_80>=0?'+':''}${p.upper_80.toFixed(2)}</td>
     <td>${Math.round(p.possessions).toLocaleString()}</td>
   </tr>`).join('');
   document.querySelectorAll('[data-impact-player]').forEach(row=>row.onclick=()=>{document.querySelectorAll('[data-impact-player]').forEach(x=>x.classList.remove('active'));row.classList.add('active');loadImpactPath(row.dataset.impactPlayer)});
 }
 $('impact-alpha').onchange=loadImpact;
+$('impact-date').onchange=loadImpact;
+$('impact-latest').onclick=()=>{$('impact-date').value='';loadImpact()};
 $('impact-search').oninput=()=>impactData&&renderImpactRows(impactData.players);
 async function loadImpactPath(playerId){
-  const d=await json(`/api/impact/${playerId}/path`);
+  const q=new URLSearchParams();if($('impact-date').value)q.set('as_of',$('impact-date').value);
+  const d=await json(`/api/impact/${playerId}/path`+(q.toString()?('?'+q):''));
   selectedImpactPlayerId=playerId;$('impact-detail-name').textContent=`${d.player.player_name} · ${d.player.team}`;$('impact-to-scenario').disabled=false;
   const current=impactData?.players.find(p=>p.player_id===playerId);
   $('impact-detail-meta').textContent=current?`Current α ${impactData.alpha.toFixed(0)} · RAPM ${current.impact_per_100>=0?'+':''}${current.impact_per_100.toFixed(2)} / 100 · approx 80% band ${current.lower_80>=0?'+':''}${current.lower_80.toFixed(2)} to ${current.upper_80>=0?'+':''}${current.upper_80.toFixed(2)} · ${Math.round(current.possessions).toLocaleString()} possessions`:'Regularization path';
@@ -637,12 +652,8 @@ function renderScenarioSensitivity(d){
   const point=Object.fromEntries(d.point.teams.map(function(x){return [x.team,x]}));
   const low=Object.fromEntries(d.impact_lower.teams.map(function(x){return [x.team,x]}));
   const high=Object.fromEntries(d.impact_upper.teams.map(function(x){return [x.team,x]}));
-  const teams=Object.keys(point).sort(function(a,b){
-    const pa=point[a],pb=point[b],ba=baseline[a],bb=baseline[b];
-    const scoreA=Math.abs(pa.expected_wins-ba.expected_wins)+8*Math.abs(pa.championship_probability-ba.championship_probability);
-    const scoreB=Math.abs(pb.expected_wins-bb.expected_wins)+8*Math.abs(pb.championship_probability-bb.championship_probability);
-    return scoreB-scoreA;
-  }).slice(0,8);
+  const summaries=(d.team_sensitivity||[]).slice(0,8);
+  const teams=summaries.length?summaries.map(function(row){return row.team}):Object.keys(point).slice(0,8);
   const changed=teams.some(function(team){
     return Math.abs(low[team].expected_wins-high[team].expected_wins)>.001
       || Math.abs(low[team].championship_probability-high[team].championship_probability)>.0001;
@@ -652,12 +663,18 @@ function renderScenarioSensitivity(d){
     target.innerHTML='<span>This scenario has no player-impact uncertainty component; the lower, point, and upper worlds are identical.</span>';
     return;
   }
+  const summaryBy=Object.fromEntries(summaries.map(function(row){return [row.team,row]}));
   target.classList.remove('empty');
   target.innerHTML=teams.map(function(team){
+    const s=summaryBy[team];
+    const stable=!s||(s.expected_wins_direction_stable&&s.championship_direction_stable);
+    const badge=stable?'STABLE':'FRAGILE';
+    const winsRange=s?s.expected_wins_range:null;
+    const titleRange=s?s.championship_probability_range:null;
     return '<div class="sensitivity-row">'
-      +'<div class="sensitivity-team"><strong>'+team+'</strong><span>signal low → point → high</span></div>'
-      +'<div class="sensitivity-metric"><span>EXPECTED WINS</span><div class="sensitivity-triplet"><strong class="low">'+low[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="point">'+point[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="high">'+high[team].expected_wins.toFixed(1)+'</strong></div></div>'
-      +'<div class="sensitivity-metric"><span>TITLE ODDS</span><div class="sensitivity-triplet"><strong class="low">'+pct(low[team].championship_probability)+'</strong><i>→</i><strong class="point">'+pct(point[team].championship_probability)+'</strong><i>→</i><strong class="high">'+pct(high[team].championship_probability)+'</strong></div></div>'
+      +'<div class="sensitivity-team"><strong>'+team+'</strong><span>signal low → point → high</span><em class="sensitivity-badge '+(stable?'stable':'fragile')+'">'+badge+'</em></div>'
+      +'<div class="sensitivity-metric"><span>EXPECTED WINS</span><div class="sensitivity-triplet"><strong class="low">'+low[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="point">'+point[team].expected_wins.toFixed(1)+'</strong><i>→</i><strong class="high">'+high[team].expected_wins.toFixed(1)+'</strong></div>'+(winsRange?'<small>Δ range '+signed(winsRange[0])+' to '+signed(winsRange[1])+'</small>':'')+'</div>'
+      +'<div class="sensitivity-metric"><span>TITLE ODDS</span><div class="sensitivity-triplet"><strong class="low">'+pct(low[team].championship_probability)+'</strong><i>→</i><strong class="point">'+pct(point[team].championship_probability)+'</strong><i>→</i><strong class="high">'+pct(high[team].championship_probability)+'</strong></div>'+(titleRange?'<small>Δ range '+(titleRange[0]>=0?'+':'')+(100*titleRange[0]).toFixed(2)+' to '+(titleRange[1]>=0?'+':'')+(100*titleRange[1]).toFixed(2)+' pts</small>':'')+'</div>'
       +'</div>';
   }).join('');
 }

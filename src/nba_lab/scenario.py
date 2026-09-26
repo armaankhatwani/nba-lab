@@ -441,6 +441,7 @@ def simulate_scenario(
         seed=seed,
         game_rating_adjustments=inputs.game_rating_adjustments,
     )
+
     return ScenarioResult(
         as_of=as_of,
         trials=trials,

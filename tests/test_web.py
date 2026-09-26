@@ -387,3 +387,70 @@ def test_scenario_matchup_uses_exact_affected_game_adjustment():
         assert data['scenario']['team_a_rating'] < data['baseline']['team_a_rating']
     else:
         assert data['scenario']['team_b_rating'] < data['baseline']['team_b_rating']
+
+
+
+def test_scenario_sensitivity_reports_direction_stability_summary():
+    r = client.post('/api/scenario/sensitivity?sensitivity_trials=160', json={
+        'as_of': '2026-01-15',
+        'trials': 160,
+        'seed': 81,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 3,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    bos = next(row for row in data['team_sensitivity'] if row['team'] == 'BOS')
+    assert len(bos['expected_wins_deltas']) == 3
+    assert bos['expected_wins_range'][0] <= bos['expected_wins_range'][1]
+    assert isinstance(bos['expected_wins_direction_stable'], bool)
+    assert isinstance(bos['championship_direction_stable'], bool)
+
+
+def test_impact_api_supports_historical_cutoff():
+    full = client.get('/api/impact?alpha=1000&limit=500')
+    assert full.status_code == 200
+    historical = client.get('/api/impact?alpha=1000&limit=500&as_of=2025-12-01')
+    assert historical.status_code == 200
+    full_data = full.json()
+    hist_data = historical.json()
+    assert hist_data['as_of'] == '2025-12-01'
+    assert hist_data['stints'] < full_data['stints']
+    assert hist_data['games'] < full_data['games']
+
+
+def test_impact_path_respects_historical_cutoff():
+    r = client.get('/api/impact/1628369/path?as_of=2025-12-01')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['as_of'] == '2025-12-01'
+    assert data['points']
+
+
+def test_lineup_players_support_historical_cutoff():
+    full = client.get('/api/lineup/players?alpha=1000')
+    historical = client.get('/api/lineup/players?alpha=1000&as_of=2025-12-01')
+    assert full.status_code == 200
+    assert historical.status_code == 200
+    assert historical.json()['as_of'] == '2025-12-01'
+    assert historical.json()['players']
+
+
+def test_lineup_compare_uses_historical_impact_slice():
+    pool = client.get('/api/lineup/players?alpha=1000&as_of=2025-12-01').json()['players']
+    ids = [row['player_id'] for row in pool[:10]]
+    assert len(ids) == 10
+    r = client.post('/api/lineup/compare', json={
+        'lineup_a': ids[:5],
+        'lineup_b': ids[5:10],
+        'alpha': 1000,
+        'prior_possessions': 300,
+        'as_of': '2025-12-01'
+    })
+    assert r.status_code == 200
+    assert r.json()['as_of'] == '2025-12-01'
