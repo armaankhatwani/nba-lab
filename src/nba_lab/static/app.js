@@ -221,6 +221,8 @@ $('replay-to-scenario').onclick=function(){
   scenarioLast=null;
   scenarioLastRequest=null;
   $('scenario-date').value=cutoff.toISOString().slice(0,10);
+  $('scenario-future-enabled').checked=false;
+  $('scenario-future-fields').hidden=true;
   $('scenario-trade-enabled').checked=false;
   $('scenario-trade-fields').hidden=true;
   pendingScenarioFlipGameId=game.game_id;
@@ -581,6 +583,7 @@ $('scenario-copy').onclick=async function(){
 };
 $('scenario-reset').onclick=async function(){
   scenarioAbsences=[];
+  pendingScenarioFlipGameId=null;
   $('scenario-future-enabled').checked=false;
   $('scenario-future-fields').hidden=true;
   $('scenario-trade-enabled').checked=false;
