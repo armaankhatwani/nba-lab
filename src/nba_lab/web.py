@@ -817,6 +817,10 @@ def run_scenario(request: ScenarioRequest):
 
     model = EloModel()
     ratings = model.fit_as_of(altered_history, request.as_of)
+    forced_by_game = {
+        row.game_id: row.forced_winner
+        for row in result.future_results
+    }
     affected_games = []
     for game in sorted(
         (row for row in GAMES if row.game_date >= request.as_of),
@@ -831,7 +835,12 @@ def run_scenario(request: ScenarioRequest):
             result.team_rating_adjustments.get(game.away_team, 0.0)
             + per_game.get(game.away_team, 0.0)
         )
-        if abs(home_delta) < 1e-12 and abs(away_delta) < 1e-12:
+        forced_winner = forced_by_game.get(game.game_id)
+        if (
+            abs(home_delta) < 1e-12
+            and abs(away_delta) < 1e-12
+            and forced_winner is None
+        ):
             continue
         base_home = model.win_probability(
             ratings[game.home_team],
@@ -850,6 +859,7 @@ def run_scenario(request: ScenarioRequest):
             "away_elo_delta": away_delta,
             "persistent_home_elo_delta": result.team_rating_adjustments.get(game.home_team, 0.0),
             "persistent_away_elo_delta": result.team_rating_adjustments.get(game.away_team, 0.0),
+            "forced_winner": forced_winner,
             "baseline_home_win_probability": base_home,
             "altered_home_win_probability": altered_home,
             "home_win_probability_delta": altered_home - base_home,
