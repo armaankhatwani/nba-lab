@@ -777,7 +777,9 @@ def test_scenario_game_lineups_apply_trade_and_game_specific_absence():
     affected = next(
         row for row in scenario.json()['affected_games']
         if 'BOS' in {row['home_team'], row['away_team']}
+        and row['closing_lineup_available']
     )
+    assert affected['closing_lineup_player_counts']['BOS'] >= 5
 
     request = {
         **scenario_body,
