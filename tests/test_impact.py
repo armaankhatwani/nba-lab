@@ -50,3 +50,12 @@ def test_rapm_reports_finite_model_based_uncertainty():
     for player in result.players:
         assert player.standard_error>=0
         assert player.lower_80<=player.impact_per_100<=player.upper_80
+
+
+def test_rapm_exposes_player_covariance_matrix():
+    result=fit_rapm(synthetic_stints(),alpha=100)
+    assert len(result.player_order)==len(result.players)
+    assert len(result.player_covariance)==len(result.player_order)
+    assert all(len(row)==len(result.player_order) for row in result.player_covariance)
+    for i in range(len(result.player_order)):
+        assert result.player_covariance[i][i]>=0
