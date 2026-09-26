@@ -35,11 +35,18 @@ class PlayerAbsenceEffect:
     player_name: str
     team: str
     impact_per_100: float
+    impact_standard_error: float
+    impact_lower_80: float
+    impact_upper_80: float
     replacement_impact_per_100: float
     minutes_per_game: float
     games_missed: int
     margin_delta_per_game: float
+    margin_delta_low_80: float
+    margin_delta_high_80: float
     elo_delta_per_game: float
+    elo_delta_low_80: float
+    elo_delta_high_80: float
     affected_game_ids: tuple[str, ...]
 
 
@@ -53,11 +60,20 @@ class TradeEffect:
     team_b: str
     player_a_impact_per_100: float
     player_b_impact_per_100: float
+    impact_difference_standard_error: float
     minutes_per_game: float
     team_a_margin_delta_per_game: float
+    team_a_margin_delta_low_80: float
+    team_a_margin_delta_high_80: float
     team_b_margin_delta_per_game: float
+    team_b_margin_delta_low_80: float
+    team_b_margin_delta_high_80: float
     team_a_elo_delta_per_game: float
+    team_a_elo_delta_low_80: float
+    team_a_elo_delta_high_80: float
     team_b_elo_delta_per_game: float
+    team_b_elo_delta_low_80: float
+    team_b_elo_delta_high_80: float
     team_a_affected_games: tuple[str, ...]
     team_b_affected_games: tuple[str, ...]
 
@@ -137,12 +153,19 @@ def build_player_absence_adjustments(
         if meta is None or impact is None:
             raise ValueError(f"unknown impact player: {absence.player_id}")
 
+        scale = (absence.minutes_per_game / 48.0) * (possessions_per_game / 100.0)
         margin_delta = (
-            (absence.replacement_impact_per_100 - impact.impact_per_100)
-            * (absence.minutes_per_game / 48.0)
-            * (possessions_per_game / 100.0)
-        )
+            absence.replacement_impact_per_100 - impact.impact_per_100
+        ) * scale
+        margin_low = (
+            absence.replacement_impact_per_100 - impact.upper_80
+        ) * scale
+        margin_high = (
+            absence.replacement_impact_per_100 - impact.lower_80
+        ) * scale
         elo_delta = elo_delta_for_margin(margin_delta, sigma)
+        elo_low = elo_delta_for_margin(margin_low, sigma)
+        elo_high = elo_delta_for_margin(margin_high, sigma)
         affected = _future_team_games(games, as_of, meta.team)[: absence.games_missed]
         for game in affected:
             game_adjustments.setdefault(game.game_id, {})
@@ -155,11 +178,18 @@ def build_player_absence_adjustments(
                 player_name=meta.player_name,
                 team=meta.team,
                 impact_per_100=impact.impact_per_100,
+                impact_standard_error=impact.standard_error,
+                impact_lower_80=impact.lower_80,
+                impact_upper_80=impact.upper_80,
                 replacement_impact_per_100=absence.replacement_impact_per_100,
                 minutes_per_game=absence.minutes_per_game,
                 games_missed=absence.games_missed,
                 margin_delta_per_game=margin_delta,
+                margin_delta_low_80=margin_low,
+                margin_delta_high_80=margin_high,
                 elo_delta_per_game=elo_delta,
+                elo_delta_low_80=elo_low,
+                elo_delta_high_80=elo_high,
                 affected_game_ids=tuple(game.game_id for game in affected),
             )
         )
@@ -196,10 +226,23 @@ def build_trade_adjustments(
             raise ValueError("trade players must be on different teams")
 
         scale = (trade.minutes_per_game / 48.0) * (possessions_per_game / 100.0)
-        margin_a = (impact_b.impact_per_100 - impact_a.impact_per_100) * scale
-        margin_b = (impact_a.impact_per_100 - impact_b.impact_per_100) * scale
+        impact_diff = impact_b.impact_per_100 - impact_a.impact_per_100
+        diff_se = sqrt(impact_a.standard_error**2 + impact_b.standard_error**2)
+        z80 = 1.2815515655446004
+        diff_low = impact_diff - z80 * diff_se
+        diff_high = impact_diff + z80 * diff_se
+        margin_a = impact_diff * scale
+        margin_a_low = diff_low * scale
+        margin_a_high = diff_high * scale
+        margin_b = -margin_a
+        margin_b_low = -margin_a_high
+        margin_b_high = -margin_a_low
         elo_a = elo_delta_for_margin(margin_a, sigma)
+        elo_a_low = elo_delta_for_margin(margin_a_low, sigma)
+        elo_a_high = elo_delta_for_margin(margin_a_high, sigma)
         elo_b = elo_delta_for_margin(margin_b, sigma)
+        elo_b_low = elo_delta_for_margin(margin_b_low, sigma)
+        elo_b_high = elo_delta_for_margin(margin_b_high, sigma)
         games_a = _future_team_games(games, as_of, meta_a.team)
         games_b = _future_team_games(games, as_of, meta_b.team)
 
@@ -219,11 +262,20 @@ def build_trade_adjustments(
             team_b=meta_b.team,
             player_a_impact_per_100=impact_a.impact_per_100,
             player_b_impact_per_100=impact_b.impact_per_100,
+            impact_difference_standard_error=diff_se,
             minutes_per_game=trade.minutes_per_game,
             team_a_margin_delta_per_game=margin_a,
+            team_a_margin_delta_low_80=margin_a_low,
+            team_a_margin_delta_high_80=margin_a_high,
             team_b_margin_delta_per_game=margin_b,
+            team_b_margin_delta_low_80=margin_b_low,
+            team_b_margin_delta_high_80=margin_b_high,
             team_a_elo_delta_per_game=elo_a,
+            team_a_elo_delta_low_80=elo_a_low,
+            team_a_elo_delta_high_80=elo_a_high,
             team_b_elo_delta_per_game=elo_b,
+            team_b_elo_delta_low_80=elo_b_low,
+            team_b_elo_delta_high_80=elo_b_high,
             team_a_affected_games=tuple(game.game_id for game in games_a),
             team_b_affected_games=tuple(game.game_id for game in games_b),
         ))
