@@ -70,6 +70,7 @@ def sync_impact():
     parser.add_argument("--pbp-dir", default="data/pbpstats")
     parser.add_argument("--source", choices=["file", "web"], default="file")
     parser.add_argument("--max-games", type=int)
+    parser.add_argument("--team", action="append", help="Only include games involving this team; repeatable")
     args = parser.parse_args()
 
     from .impact_sync import build_impact_snapshot
@@ -80,6 +81,7 @@ def sync_impact():
         pbp_dir=args.pbp_dir,
         source=args.source,
         max_games=args.max_games,
+        teams=set(args.team or []),
     )
     qa = payload.get("qa", {})
     print(
@@ -108,3 +110,38 @@ def sync_replay():
         target = output_dir / f"{game_id}.json"
         target.write_bytes(content)
         print(f"Wrote {len(content):,} bytes to {target}")
+
+
+
+def sync_bundle():
+    """Freeze a reproducible multi-lab season data bundle."""
+    parser = argparse.ArgumentParser(prog="nba-lab-sync-bundle")
+    parser.add_argument("--season", required=True, help="Season such as 2025-26")
+    parser.add_argument("--output-dir", default="data")
+    parser.add_argument("--replay-count", type=int, default=8)
+    parser.add_argument("--replay-team", action="append", help="Prefer replay games involving this team; repeatable")
+    parser.add_argument("--impact-games", type=int, default=0, help="Build RAPM data from this many selected games; 0 skips")
+    parser.add_argument("--impact-source", choices=["file", "web"], default="web")
+    parser.add_argument("--impact-team", action="append", help="Limit RAPM ingestion to games involving this team; repeatable")
+    args = parser.parse_args()
+
+    from .data_bundle import sync_season_bundle
+
+    manifest = sync_season_bundle(
+        season=args.season,
+        output_dir=args.output_dir,
+        replay_count=args.replay_count,
+        replay_teams=set(args.replay_team or []),
+        impact_games=args.impact_games,
+        impact_source=args.impact_source,
+        impact_teams=set(args.impact_team or []),
+    )
+    replay_ok = sum(row.get("status") == "ok" for row in manifest["replays"])
+    replay_failed = sum(row.get("status") == "error" for row in manifest["replays"])
+    print(
+        f"NBA Lab bundle {args.season}: "
+        f"{manifest['schedule']['games']:,} schedule games, "
+        f"{replay_ok} replay snapshots ({replay_failed} failed), "
+        f"impact={manifest['impact']['status']}"
+    )
+    print(f"Manifest: {args.output_dir}/nba_lab_bundle_manifest.json")
