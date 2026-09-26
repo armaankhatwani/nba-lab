@@ -10,6 +10,7 @@ from .domain import Game
 from .impact import RapmResult
 from .impact_source import ImpactSnapshot
 from .replay import historical_margin_sigma
+from .branch import flip_game
 from .simulator import SimulationResult, simulate_remaining_season
 
 
@@ -36,6 +37,16 @@ class PlayerAbsenceEffect:
 
 
 @dataclass(frozen=True)
+class HistoricalFlipEffect:
+    game_id: str
+    game_date: date
+    home_team: str
+    away_team: str
+    original_winner: str
+    flipped_winner: str
+
+
+@dataclass(frozen=True)
 class ScenarioResult:
     as_of: date
     trials: int
@@ -43,6 +54,7 @@ class ScenarioResult:
     altered: SimulationResult
     deltas: tuple[TeamDelta, ...]
     player_absences: tuple[PlayerAbsenceEffect, ...]
+    historical_flips: tuple[HistoricalFlipEffect, ...]
 
 
 def elo_delta_for_margin(margin_delta: float, margin_sigma: float) -> float:
@@ -125,17 +137,34 @@ def simulate_scenario(
     impact_snapshot: ImpactSnapshot,
     rapm: RapmResult,
     absences: list[PlayerAbsence],
+    flipped_game_ids: list[str] | None = None,
     trials: int = 5000,
     seed: int = 2026,
 ) -> ScenarioResult:
+    altered_games = list(games)
+    flip_effects: list[HistoricalFlipEffect] = []
+    for game_id in flipped_game_ids or []:
+        altered_games, target = flip_game(altered_games, game_id)
+        if target.game_date >= as_of:
+            raise ValueError("historical scenario flips must occur before the as-of date")
+        flipped = next(game for game in altered_games if game.game_id == game_id)
+        flip_effects.append(HistoricalFlipEffect(
+            game_id=game_id,
+            game_date=target.game_date,
+            home_team=target.home_team,
+            away_team=target.away_team,
+            original_winner=target.winner or "",
+            flipped_winner=flipped.winner or "",
+        ))
+
     adjustments, effects = build_player_absence_adjustments(
-        games, as_of, impact_snapshot, rapm, absences
+        altered_games, as_of, impact_snapshot, rapm, absences
     )
     baseline = simulate_remaining_season(
         games, as_of, trials=trials, seed=seed
     )
     altered = simulate_remaining_season(
-        games,
+        altered_games,
         as_of,
         trials=trials,
         seed=seed,
@@ -148,4 +177,5 @@ def simulate_scenario(
         altered=altered,
         deltas=build_team_deltas(baseline, altered),
         player_absences=effects,
+        historical_flips=tuple(flip_effects),
     )
