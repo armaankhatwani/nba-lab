@@ -25,7 +25,7 @@ from .impact import fit_rapm
 from .impact_source import load_impact_snapshot, snapshot_as_of
 from .lineup import compare_lineups, optimize_lineups
 from .leverage import rank_upcoming_games
-from .replay import compare_replay_intervention
+from .replay import compare_replay_intervention, replay_probability_timeline
 from .replay_source import load_replay_directory
 from .replay_season import propagate_replay_to_season
 from .demo_impact import synthetic_impact_snapshot
@@ -652,6 +652,43 @@ def replay_games():
         })
     rows.sort(key=lambda row: (row["date"], row["game_id"]), reverse=True)
     return {"source": REPLAY_SOURCE, "games": rows}
+
+
+@app.get("/api/replay/{game_id}/timeline")
+def replay_timeline(game_id: str, limit: int = 8):
+    snapshot = REPLAY_SNAPSHOTS.get(game_id)
+    if snapshot is None:
+        raise HTTPException(404, f"No replay snapshot for game: {game_id}")
+    game = next((game for game in GAMES if game.game_id == game_id), None)
+    if game is None:
+        raise HTTPException(404, f"Unknown scheduled game: {game_id}")
+    try:
+        points = replay_probability_timeline(GAMES, snapshot.events)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    limit = max(1, min(limit, 20))
+    turning_points = sorted(
+        points[1:],
+        key=lambda row: (
+            -abs(row.probability_swing),
+            row.event_index,
+        ),
+    )[:limit]
+    return {
+        "source": REPLAY_SOURCE,
+        "game": {
+            "game_id": game.game_id,
+            "date": game.game_date.isoformat(),
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+            "home_score": game.home_score,
+            "away_score": game.away_score,
+        },
+        "points": [asdict(row) for row in points],
+        "turning_points": [asdict(row) for row in turning_points],
+        "definition": "Event-by-event home win probability under the same score/time/pregame-strength model used by Game Replay. Swing is the change from the prior event.",
+    }
 
 
 @app.get("/api/replay/{game_id}")
