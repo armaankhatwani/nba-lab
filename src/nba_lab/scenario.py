@@ -106,7 +106,10 @@ class HistoricalFlipEffect:
 @dataclass(frozen=True)
 class ScenarioInputs:
     altered_games: tuple[Game, ...]
+    team_rating_adjustments: dict[str, float]
     game_rating_adjustments: dict[str, dict[str, float]]
+    impact_lower_team_adjustments: dict[str, float]
+    impact_upper_team_adjustments: dict[str, float]
     impact_lower_adjustments: dict[str, dict[str, float]]
     impact_upper_adjustments: dict[str, dict[str, float]]
     forced_winners: dict[str, str]
@@ -127,6 +130,7 @@ class ScenarioResult:
     historical_flips: tuple[HistoricalFlipEffect, ...]
     future_results: tuple[FutureResultEffect, ...]
     trades: tuple[TradeEffect, ...]
+    team_rating_adjustments: dict[str, float]
     game_rating_adjustments: dict[str, dict[str, float]]
 
 
@@ -226,10 +230,10 @@ def build_trade_adjustments(
     rapm: RapmResult,
     trades: list[TradeIntervention],
     possessions_per_game: float = 100.0,
-) -> tuple[dict[str, dict[str, float]], tuple[TradeEffect, ...]]:
+) -> tuple[dict[str, float], tuple[TradeEffect, ...]]:
     impact_by_id = {row.player_id: row for row in rapm.players}
     sigma = historical_margin_sigma(games, as_of)
-    adjustments: dict[str, dict[str, float]] = {}
+    adjustments: dict[str, float] = {}
     effects: list[TradeEffect] = []
 
     for trade in trades:
@@ -267,12 +271,8 @@ def build_trade_adjustments(
         games_a = _future_team_games(games, as_of, meta_a.team)
         games_b = _future_team_games(games, as_of, meta_b.team)
 
-        for game in games_a:
-            adjustments.setdefault(game.game_id, {})
-            adjustments[game.game_id][meta_a.team] = adjustments[game.game_id].get(meta_a.team, 0.0) + elo_a
-        for game in games_b:
-            adjustments.setdefault(game.game_id, {})
-            adjustments[game.game_id][meta_b.team] = adjustments[game.game_id].get(meta_b.team, 0.0) + elo_b
+        adjustments[meta_a.team] = adjustments.get(meta_a.team, 0.0) + elo_a
+        adjustments[meta_b.team] = adjustments.get(meta_b.team, 0.0) + elo_b
 
         effects.append(TradeEffect(
             player_a_id=trade.player_a_id,
@@ -320,54 +320,55 @@ def _merge_game_adjustments(
 def _build_impact_sensitivity_adjustments(
     absences: tuple[PlayerAbsenceEffect, ...],
     trades: tuple[TradeEffect, ...],
-) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
-    """Build coherent componentwise lower/upper player-impact worlds.
+) -> tuple[
+    dict[str, dict[str, float]],
+    dict[str, dict[str, float]],
+    dict[str, float],
+    dict[str, float],
+]:
+    """Build coherent lower/upper player-impact sensitivity worlds.
 
+    Absence uncertainty is temporary and game-specific. Trade uncertainty is
+    persistent team strength because the roster change survives into playoffs.
     These are sensitivity worlds, not formal outcome confidence intervals.
     """
-    lower: dict[str, dict[str, float]] = {}
-    upper: dict[str, dict[str, float]] = {}
+    lower_games: dict[str, dict[str, float]] = {}
+    upper_games: dict[str, dict[str, float]] = {}
+    lower_teams: dict[str, float] = {}
+    upper_teams: dict[str, float] = {}
 
     for effect in absences:
         # Lower player impact => a milder absence penalty (numerically higher Elo delta).
         for game_id in effect.affected_game_ids:
-            lower.setdefault(game_id, {})
-            upper.setdefault(game_id, {})
-            lower[game_id][effect.team] = (
-                lower[game_id].get(effect.team, 0.0) + effect.elo_delta_high_80
+            lower_games.setdefault(game_id, {})
+            upper_games.setdefault(game_id, {})
+            lower_games[game_id][effect.team] = (
+                lower_games[game_id].get(effect.team, 0.0) + effect.elo_delta_high_80
             )
-            upper[game_id][effect.team] = (
-                upper[game_id].get(effect.team, 0.0) + effect.elo_delta_low_80
+            upper_games[game_id][effect.team] = (
+                upper_games[game_id].get(effect.team, 0.0) + effect.elo_delta_low_80
             )
 
     for effect in trades:
-        # The uncertain parameter is the B-minus-A RAPM difference. Its lower
-        # and upper values must move the two teams in opposite directions.
-        for game_id in effect.team_a_affected_games:
-            lower.setdefault(game_id, {})
-            upper.setdefault(game_id, {})
-            lower[game_id][effect.team_a] = (
-                lower[game_id].get(effect.team_a, 0.0)
-                + effect.team_a_elo_delta_low_80
-            )
-            upper[game_id][effect.team_a] = (
-                upper[game_id].get(effect.team_a, 0.0)
-                + effect.team_a_elo_delta_high_80
-            )
-        for game_id in effect.team_b_affected_games:
-            lower.setdefault(game_id, {})
-            upper.setdefault(game_id, {})
-            lower[game_id][effect.team_b] = (
-                lower[game_id].get(effect.team_b, 0.0)
-                + effect.team_b_elo_delta_high_80
-            )
-            upper[game_id][effect.team_b] = (
-                upper[game_id].get(effect.team_b, 0.0)
-                + effect.team_b_elo_delta_low_80
-            )
+        # Lower B-minus-A impact difference hurts team A more and team B less.
+        lower_teams[effect.team_a] = (
+            lower_teams.get(effect.team_a, 0.0)
+            + effect.team_a_elo_delta_low_80
+        )
+        upper_teams[effect.team_a] = (
+            upper_teams.get(effect.team_a, 0.0)
+            + effect.team_a_elo_delta_high_80
+        )
+        lower_teams[effect.team_b] = (
+            lower_teams.get(effect.team_b, 0.0)
+            + effect.team_b_elo_delta_high_80
+        )
+        upper_teams[effect.team_b] = (
+            upper_teams.get(effect.team_b, 0.0)
+            + effect.team_b_elo_delta_low_80
+        )
 
-    return lower, upper
-
+    return lower_games, upper_games, lower_teams, upper_teams
 
 def build_scenario_inputs(
     games: list[Game],
@@ -439,13 +440,15 @@ def build_scenario_inputs(
     trade_adjustments, trade_effects = build_trade_adjustments(
         altered_games, as_of, impact_snapshot, rapm, trades or []
     )
-    adjustments = _merge_game_adjustments(absence_adjustments, trade_adjustments)
-    impact_lower, impact_upper = _build_impact_sensitivity_adjustments(
-        absence_effects, trade_effects
+    impact_lower, impact_upper, impact_lower_teams, impact_upper_teams = (
+        _build_impact_sensitivity_adjustments(absence_effects, trade_effects)
     )
     return ScenarioInputs(
         altered_games=tuple(altered_games),
-        game_rating_adjustments=adjustments,
+        team_rating_adjustments=trade_adjustments,
+        game_rating_adjustments=absence_adjustments,
+        impact_lower_team_adjustments=impact_lower_teams,
+        impact_upper_team_adjustments=impact_upper_teams,
         impact_lower_adjustments=impact_lower,
         impact_upper_adjustments=impact_upper,
         forced_winners=forced_winners,
@@ -486,6 +489,7 @@ def simulate_scenario(
         as_of,
         trials=trials,
         seed=seed,
+        rating_adjustments=inputs.team_rating_adjustments,
         game_rating_adjustments=inputs.game_rating_adjustments,
         forced_winners=inputs.forced_winners,
     )
@@ -500,5 +504,6 @@ def simulate_scenario(
         historical_flips=inputs.historical_flips,
         future_results=inputs.future_results,
         trades=inputs.trades,
+        team_rating_adjustments=inputs.team_rating_adjustments,
         game_rating_adjustments=inputs.game_rating_adjustments,
     )
