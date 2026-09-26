@@ -41,3 +41,17 @@ def test_score_intervention_moves_probability_with_common_randomness():
 def test_final_buzzer_non_tie_is_deterministic():
     result = simulate_from_event(games(), event(period=4, clock=0, home=101, away=100), trials=100)
     assert result.home_win_probability == 1
+
+
+def test_future_margin_adjustment_moves_only_altered_world():
+    result = compare_replay_intervention(
+        games(),
+        event(period=4, clock=180, home=100, away=100),
+        trials=4000,
+        seed=19,
+        future_margin_adjustment=2.5,
+    )
+    assert result.home_win_probability_delta > 0
+    assert abs(result.expected_final_margin_delta - 2.5) < 1e-9
+    assert result.baseline.future_margin_adjustment == 0
+    assert result.altered.future_margin_adjustment == 2.5
