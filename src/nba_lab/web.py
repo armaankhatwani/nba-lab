@@ -194,7 +194,7 @@ class FutureResultRequest(BaseModel):
     winner: str
 
 
-class PlayerAbsenceScenarioRequest(BaseModel):
+class ScenarioRequest(BaseModel):
     as_of: date
     trials: int = Field(default=5000, ge=100, le=25000)
     seed: int = 2026
@@ -205,11 +205,11 @@ class PlayerAbsenceScenarioRequest(BaseModel):
     trades: list[TradeRequest] = Field(default_factory=list)
 
 
-class ScenarioMatchupRequest(PlayerAbsenceScenarioRequest):
+class ScenarioMatchupRequest(ScenarioRequest):
     game_id: str
 
 
-def _scenario_absences(request: PlayerAbsenceScenarioRequest):
+def _scenario_absences(request: ScenarioRequest):
     return [
         PlayerAbsence(
             player_id=row.player_id,
@@ -221,14 +221,14 @@ def _scenario_absences(request: PlayerAbsenceScenarioRequest):
     ]
 
 
-def _scenario_future_results(request: PlayerAbsenceScenarioRequest):
+def _scenario_future_results(request: ScenarioRequest):
     return [
         FutureResultIntervention(game_id=row.game_id, winner=row.winner)
         for row in request.future_results
     ]
 
 
-def _scenario_trades(request: PlayerAbsenceScenarioRequest):
+def _scenario_trades(request: ScenarioRequest):
     return [
         TradeIntervention(
             player_a_id=row.player_a_id,
@@ -239,7 +239,7 @@ def _scenario_trades(request: PlayerAbsenceScenarioRequest):
     ]
 
 
-def _scenario_has_intervention(request: PlayerAbsenceScenarioRequest) -> bool:
+def _scenario_has_intervention(request: ScenarioRequest) -> bool:
     return bool(
         request.absences
         or request.flipped_game_ids
@@ -716,8 +716,9 @@ def replay_simulate(request: ReplaySimRequest):
     }
 
 
+@app.post("/api/scenario/run")
 @app.post("/api/scenario/player-absence")
-def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
+def run_scenario(request: ScenarioRequest):
     if not _scenario_has_intervention(request):
         raise HTTPException(422, "scenario requires at least one intervention")
     try:
@@ -799,7 +800,7 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
         "trades": [asdict(row) for row in result.trades],
         "affected_games": affected_games,
         "award_ripple": award_ripple[:8],
-        "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games. Historical flips rebuild point-in-time team and award context.",
+        "warning": "Scenario outputs are model counterfactuals. Player interventions use RAPM association estimates; historical branches rebuild point-in-time context; forced future results are deterministic assumptions inside every simulated path.",
     }
 
 
@@ -865,7 +866,7 @@ def scenario_matchup(request: ScenarioMatchupRequest):
 
 
 @app.post("/api/scenario/sensitivity")
-def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_trials: int = 750):
+def scenario_sensitivity(request: ScenarioRequest, sensitivity_trials: int = 750):
     if not _scenario_has_intervention(request):
         raise HTTPException(422, "scenario requires at least one intervention")
     sensitivity_trials = max(100, min(sensitivity_trials, 5000))
@@ -974,7 +975,7 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
 
 
 @app.post("/api/scenario/awards")
-def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 750):
+def scenario_awards(request: ScenarioRequest, award_trials: int = 750):
     if not _scenario_has_intervention(request):
         raise HTTPException(422, "scenario requires at least one intervention")
     award_trials = max(100, min(award_trials, 5000))
@@ -1059,7 +1060,7 @@ def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 7
 
 @app.post("/api/scenario/leverage")
 def scenario_leverage(
-    request: PlayerAbsenceScenarioRequest,
+    request: ScenarioRequest,
     leverage_trials: int = 500,
     limit: int = 10,
 ):
