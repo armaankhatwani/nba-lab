@@ -23,7 +23,7 @@ Complexity has to earn promotion through chronological evaluation or by unlockin
 ## Live labs
 
 - **Season Lab** — simulate the remaining regular season, play-in, playoffs, Finals, and historical game-result branches.
-- **Scenario Lab** — compose history, forced future results, availability, and RAPM-backed trade interventions; compare season distributions; propagate the same world into MVP futures and pivotal-game rankings; copy a reproducible scenario link.
+- **Scenario Lab** — compose history, forced future results, availability, and RAPM-backed trade interventions; compare season distributions; propagate the same world into MVP futures, pivotal-game rankings, and one fully sampled standings/playoff bracket; copy a reproducible scenario link.
 - **Matchup Lab** — simulate one game or a best-of-3/5/7 from a frozen point-in-time team state.
 - **Timeline Lab** — replay a team's rating and record game by game.
 - **Model Lab** — inspect chronological Brier score, log loss, accuracy, calibration, and the promotion baseline.
@@ -58,11 +58,12 @@ Scenario Lab currently supports:
 - up to three explicit player absences;
 - zero or one player-for-player trade;
 - stated missed games, modeled minutes, and replacement RAPM;
-- game-specific Elo-equivalent adjustments derived from RAPM impact;
+- temporary game-specific Elo-equivalent adjustments for absences and persistent team-strength adjustments for trades;
 - paired season simulation;
 - point-in-time MVP race ripple from altered history;
 - optional simulated MVP-finish comparison under the same scenario;
-- versioned share links that restore the full composer.
+- deterministic **Reroll Future** worlds with final standings, play-in, full playoff bracket, and champion;
+- versioned share links that restore the full composer and world seed.
 
 A traded player cannot also be marked absent in the same scenario yet because the timing semantics would be ambiguous.
 
