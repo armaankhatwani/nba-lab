@@ -123,7 +123,15 @@
         <div class="scenario-layout">
           <aside class="panel scenario-builder">
             <div class="section-head"><div><span class="eyebrow">INTERVENTIONS</span><h2>Build the alternate world</h2></div><div class="scenario-builder-actions"><button class="ghost-button" id="scenario-copy">COPY LINK</button><button class="ghost-button" id="scenario-reset">RESET</button><button class="ghost-button" id="scenario-add">+ ADD PLAYER</button></div></div><div id="scenario-share-status" class="scenario-share-status"></div>
-            <div class="scenario-history-branch"><label>Optional historical branch<select id="scenario-flip-game"><option value="">No game flip</option></select></label><small>Reverse one completed game before the cutoff, then layer player absences on top of that altered history.</small></div>
+            <div class="scenario-history-branch"><label>Optional historical branch<select id="scenario-flip-game"><option value="">No game flip</option></select></label><small>Reverse one completed game before the cutoff, then layer other interventions on top of that altered history.</small></div>
+            <div class="scenario-future-card">
+              <div class="scenario-future-head"><label><input id="scenario-future-enabled" type="checkbox"> Force an upcoming result</label></div>
+              <div id="scenario-future-fields" hidden>
+                <label>Upcoming game<select id="scenario-future-game"></select></label>
+                <label>Force winner<select id="scenario-future-winner"></select></label>
+                <small>This result is deterministic in every simulated future. It is separate from rewriting a game that already occurred before the cutoff.</small>
+              </div>
+            </div>
             <div class="scenario-trade-card">
               <div class="scenario-trade-head"><label><input id="scenario-trade-enabled" type="checkbox"> Add player-for-player trade</label></div>
               <div id="scenario-trade-fields" hidden>
