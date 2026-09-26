@@ -222,3 +222,44 @@ def test_trade_only_scenario_api():
     effect = data['trades'][0]
     assert effect['team_a'] != effect['team_b']
     assert effect['team_a_elo_delta_per_game'] * effect['team_b_elo_delta_per_game'] <= 0
+
+
+def test_scenario_awards_propagates_shared_star_absence():
+    r = client.post('/api/scenario/awards?award_trials=150', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 19,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 12,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    row = next(delta for delta in data['deltas'] if delta['player_id'] == '1628369')
+    assert row['baseline_team'] == 'BOS'
+    assert row['altered_team'] == 'BOS'
+    assert row['leader_probability_delta'] <= 0
+
+
+def test_scenario_awards_tracks_traded_candidate_team():
+    r = client.post('/api/scenario/awards?award_trials=120', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 23,
+        'alpha': 1000,
+        'trades': [{
+            'player_a_id': '203999',
+            'player_b_id': '1628369',
+            'minutes_per_game': 34
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    jokic = next(row for row in data['deltas'] if row['player_id'] == '203999')
+    tatum = next(row for row in data['deltas'] if row['player_id'] == '1628369')
+    assert jokic['baseline_team'] == 'DEN' and jokic['altered_team'] == 'BOS'
+    assert tatum['baseline_team'] == 'BOS' and tatum['altered_team'] == 'DEN'
