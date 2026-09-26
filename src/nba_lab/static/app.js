@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null;
+const $=id=>document.getElementById(id);let meta={},mode='flip',diagnosticsLoaded=false,lastDeltas=[],awardHistory=[],currentAwardRace=null,awardTimer=null,impactData=null,lineupPool=[],lineupA=[],lineupB=[],replayGames=[],replayData=null,replayIndex=0,replayLastResult=null,scenarioPlayers=[],scenarioAbsences=[],scenarioLast=null,scenarioLastRequest=null,selectedImpactPlayerId=null,pendingScenarioFlipGameId=null;
 const pct=x=>`${(100*x).toFixed(x<.1?1:0)}%`;const signed=x=>`${x>=0?'+':''}${x.toFixed(2)}`;
 async function json(url,options){const r=await fetch(url,options);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
 function teamOptions(select,includeAll=false){select.replaceChildren();if(includeAll){const o=document.createElement('option');o.value='';o.textContent='All teams';select.append(o)}Object.keys(meta.team_metadata).sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=`${t} · ${meta.team_metadata[t].name}`;select.append(o)})}
@@ -110,8 +110,9 @@ function replayClock(seconds){
 }
 function replayPeriod(period){return period<=4?`Q${period}`:`OT${period-4}`}
 function clearReplayResults(){
+  replayLastResult=null;
   ['replay-base-prob','replay-alt-prob','replay-prob-delta','replay-margin'].forEach(id=>$(id).textContent='—');
-  $('replay-run-note').textContent='run a simulation';$('replay-prob-bars').innerHTML='';$('replay-margin-dist').innerHTML='';$('replay-season-panel').hidden=true;$('replay-season-ripple').innerHTML='';
+  $('replay-run-note').textContent='run a simulation';$('replay-prob-bars').innerHTML='';$('replay-margin-dist').innerHTML='';$('replay-season-panel').hidden=true;$('replay-season-ripple').innerHTML='';$('replay-to-scenario').hidden=true;
 }
 function renderReplayEvent(){
   if(!replayData?.events?.length)return;
@@ -161,6 +162,7 @@ $('replay-run').onclick=async()=>{
   }catch(e){$('replay-run-note').textContent=e.message}finally{button.disabled=false}
 };
 function renderReplayResult(d){
+  replayLastResult=d;
   const b=d.baseline,a=d.altered,delta=d.home_win_probability_delta;
   $('replay-base-prob').textContent=pct(b.home_win_probability);
   $('replay-alt-prob').textContent=pct(a.home_win_probability);
@@ -187,6 +189,13 @@ function renderReplayResult(d){
 function renderReplaySeasonRipple(ripple){
   if(!ripple?.teams?.length)return;
   $('replay-season-panel').hidden=false;
+  if(replayData?.game){
+    const game=replayData.game;
+    const actualWinner=Number(game.home_score)>Number(game.away_score)?game.home_team:game.away_team;
+    const opposite=actualWinner===game.home_team?game.away_team:game.home_team;
+    $('replay-to-scenario').textContent='BRANCH: '+opposite+' WINS ↗';
+    $('replay-to-scenario').hidden=false;
+  }
   $('replay-season-note').textContent=`${ripple.trials.toLocaleString()} paired season branches`;
   $('replay-season-ripple').innerHTML=ripple.teams.slice(0,10).map(row=>{
     const title=row.championship_probability_delta*100,playoffs=row.playoffs_probability_delta*100,wins=row.expected_wins_delta;
@@ -195,6 +204,22 @@ function renderReplaySeasonRipple(ripple){
     return `<div class="replay-season-card"><span>${row.team}</span><strong class="${cls}">${wins>=0?'+':''}${wins.toFixed(3)} wins</strong><small>playoffs ${playoffs>=0?'+':''}${playoffs.toFixed(2)} pts<br>title ${title>=0?'+':''}${title.toFixed(2)} pts</small></div>`;
   }).join('');
 }
+
+
+$('replay-to-scenario').onclick=function(){
+  if(!replayData?.game||!replayLastResult)return;
+  const game=replayData.game;
+  const cutoff=new Date(game.date+'T12:00:00Z');
+  cutoff.setUTCDate(cutoff.getUTCDate()+1);
+  scenarioAbsences=[];
+  scenarioLast=null;
+  scenarioLastRequest=null;
+  $('scenario-date').value=cutoff.toISOString().slice(0,10);
+  $('scenario-trade-enabled').checked=false;
+  $('scenario-trade-fields').hidden=true;
+  pendingScenarioFlipGameId=game.game_id;
+  openView('scenario');
+};
 
 async function loadLineup(){
   const alpha=Number($('lineup-alpha').value||1000);
@@ -210,6 +235,12 @@ async function loadLineup(){
   if($('lineup-team-filter').options.length<=1){
     teams.forEach(team=>{const o=document.createElement('option');o.value=team;o.textContent=team;$('lineup-team-filter').append(o)});
   }
+  const optTeam=$('lineup-opt-team');
+  const previousTeam=optTeam.value;
+  optTeam.replaceChildren();
+  teams.forEach(team=>{const o=document.createElement('option');o.value=team;o.textContent=team;optTeam.append(o)});
+  if(teams.includes(previousTeam))optTeam.value=previousTeam;
+  else if(teams.includes('BOS'))optTeam.value='BOS';
   renderLineupSlots();
   renderLineupPool();
 }
@@ -255,10 +286,10 @@ function resetLineupResult(){
 }
 $('lineup-search').oninput=renderLineupPool;
 $('lineup-team-filter').onchange=renderLineupPool;
-$('lineup-alpha').onchange=async()=>{await loadLineup();resetLineupResult()};
-$('lineup-date').onchange=async()=>{await loadLineup();resetLineupResult()};
-$('lineup-latest').onclick=async()=>{$('lineup-date').value='';await loadLineup();resetLineupResult()};
-$('lineup-prior').onchange=resetLineupResult;
+$('lineup-alpha').onchange=async()=>{await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-date').onchange=async()=>{await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-latest').onclick=async()=>{$('lineup-date').value='';await loadLineup();resetLineupResult();resetLineupOptimizer()};
+$('lineup-prior').onchange=()=>{resetLineupResult();resetLineupOptimizer()};
 $('lineup-swap').onclick=()=>{const copy=[...lineupA];lineupA=[...lineupB];lineupB=copy;resetLineupResult();renderLineupSlots();renderLineupPool()};
 $('lineup-run').onclick=async()=>{
   if(lineupA.length!==5||lineupB.length!==5){$('lineup-margin-note').textContent='both sides need five unique players';return}
@@ -280,6 +311,64 @@ $('lineup-run').onclick=async()=>{
     $('lineup-a-meta').innerHTML=meta(a);$('lineup-b-meta').innerHTML=meta(b);
   }catch(e){$('lineup-margin-note').textContent=e.message}finally{button.disabled=false}
 };
+
+
+function resetLineupOptimizer(){
+  $('lineup-opt-candidates').textContent='—';
+  $('lineup-opt-combos').textContent='—';
+  $('lineup-opt-best').textContent='—';
+  $('lineup-opt-evidence').textContent='—';
+  $('lineup-opt-results').classList.add('empty');
+  $('lineup-opt-results').innerHTML='<span>Choose a team and enumerate its modeled closing groups.</span>';
+}
+$('lineup-opt-run').onclick=async()=>{
+  const button=$('lineup-opt-run');button.disabled=true;
+  const target=$('lineup-opt-results');
+  target.classList.add('empty');target.innerHTML='<span>Enumerating five-man combinations…</span>';
+  try{
+    const q=new URLSearchParams({
+      team:$('lineup-opt-team').value,
+      alpha:String(Number($('lineup-alpha').value)),
+      prior_possessions:String(Number($('lineup-prior').value)),
+      top_k:String(Number($('lineup-opt-limit').value))
+    });
+    if($('lineup-date').value)q.set('as_of',$('lineup-date').value);
+    const d=await json('/api/lineup/optimize?'+q);
+    $('lineup-opt-candidates').textContent=d.candidate_players;
+    $('lineup-opt-combos').textContent=Number(d.combinations_evaluated).toLocaleString();
+    const top=d.lineups[0];
+    $('lineup-opt-best').textContent=top?(top.blended_net_rating>=0?'+':'')+top.blended_net_rating.toFixed(1):'—';
+    $('lineup-opt-evidence').textContent=top?Math.round(top.observed_possessions).toLocaleString():'—';
+    if(!d.lineups.length){
+      target.classList.add('empty');target.innerHTML='<span>No eligible five-man combinations for this snapshot.</span>';return;
+    }
+    target.classList.remove('empty');
+    target.innerHTML=d.lineups.map(function(row,i){
+      const names=row.player_meta.map(function(p){return p.player_name}).join(' · ');
+      const weight=Math.round(100*row.observed_weight);
+      return '<div class="lineup-opt-row">'
+        +'<div class="lineup-opt-rank">'+String(i+1).padStart(2,'0')+'</div>'
+        +'<div class="lineup-opt-players"><strong>'+names+'</strong><span>'+d.team+' · '+(row.observed_possessions>0?'observed unit':'unseen combination')+'</span></div>'
+        +'<div class="lineup-opt-stat"><span>MODEL NET</span><strong>'+(row.blended_net_rating>=0?'+':'')+row.blended_net_rating.toFixed(1)+'</strong></div>'
+        +'<div class="lineup-opt-band">'+(row.blended_lower_80>=0?'+':'')+row.blended_lower_80.toFixed(1)+' → '+(row.blended_upper_80>=0?'+':'')+row.blended_upper_80.toFixed(1)+'</div>'
+        +'<div class="lineup-opt-stat"><span>EVIDENCE</span><strong>'+Math.round(row.observed_possessions)+' poss · '+weight+'%</strong></div>'
+        +'<button data-load-opt-lineup="'+row.players.join(',')+'">LOAD A ↗</button>'
+        +'</div>';
+    }).join('');
+    document.querySelectorAll('[data-load-opt-lineup]').forEach(function(button){
+      button.onclick=function(){
+        lineupA=button.dataset.loadOptLineup.split(',');
+        lineupB=lineupB.filter(function(pid){return !lineupA.includes(pid)});
+        resetLineupResult();renderLineupSlots();renderLineupPool();
+        $('lineup-margin-note').textContent='optimized group loaded into Lineup A';
+      };
+    });
+  }catch(e){
+    target.classList.add('empty');target.innerHTML='<span>'+e.message+'</span>';
+  }finally{button.disabled=false}
+};
+$('lineup-opt-team').onchange=resetLineupOptimizer;
+$('lineup-opt-limit').onchange=resetLineupOptimizer;
 
 async function loadImpact(){
   const alpha=Number($('impact-alpha').value||1000);
@@ -482,8 +571,18 @@ $('scenario-reset').onclick=async function(){
 async function loadScenario(){
   await loadScenarioPlayers();
   await loadScenarioHistory();
-  if(!scenarioAbsences.length) addScenarioAbsence(selectedImpactPlayerId||((scenarioPlayers[0]||{}).player_id));
+  if(pendingScenarioFlipGameId){
+    const gameId=pendingScenarioFlipGameId;
+    const exists=[].slice.call($('scenario-flip-game').options).some(function(option){return option.value===gameId});
+    if(exists)$('scenario-flip-game').value=gameId;
+    pendingScenarioFlipGameId=null;
+    setScenarioShareStatus(exists?'Replay branch loaded. Add more interventions or run the world.':'Replay game is not available before this cutoff.',!exists);
+  }
+  if(!scenarioAbsences.length&&!$('scenario-flip-game').value&&!$('scenario-trade-enabled').checked){
+    addScenarioAbsence(selectedImpactPlayerId||((scenarioPlayers[0]||{}).player_id));
+  }
   renderScenarioAbsences();
+  updateScenarioCountPreview();
 }
 async function loadScenarioHistory(){
   const select=$('scenario-flip-game');
