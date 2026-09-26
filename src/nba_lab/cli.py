@@ -145,3 +145,33 @@ def sync_bundle():
         f"impact={manifest['impact']['status']}"
     )
     print(f"Manifest: {args.output_dir}/nba_lab_bundle_manifest.json")
+
+
+
+def doctor():
+    """Verify the frozen NBA Lab bundle and print data readiness."""
+    parser = argparse.ArgumentParser(prog="nba-lab-doctor")
+    parser.add_argument(
+        "--manifest",
+        default="data/nba_lab_bundle_manifest.json",
+    )
+    args = parser.parse_args()
+
+    from .data_bundle import verify_bundle_manifest
+
+    report = verify_bundle_manifest(args.manifest)
+    if report.get("error"):
+        print(f"NBA Lab data check: FAIL — {report['error']}")
+        raise SystemExit(1)
+
+    for row in report["artifacts"]:
+        marker = "OK" if row["status"] == "ok" else "FAIL"
+        print(f"[{marker}] {row['name']}: {row['status']} · {row.get('path')}")
+    if report["valid"]:
+        print(
+            f"NBA Lab data check: PASS · season={report.get('season')} · "
+            f"{len(report['artifacts'])} artifacts verified"
+        )
+        return
+    print("NBA Lab data check: FAIL — one or more artifacts did not match the manifest")
+    raise SystemExit(1)
