@@ -134,7 +134,7 @@ def simulate_award_futures(
         result.append(AwardFutureCandidate(
             player_id=pid,
             player_name=name,
-            team=team,
+            team=team_overrides.get(pid, team),
             leader_probability=leaders[pid]/trials,
             top3_probability=top3[pid]/trials,
             mean_final_score=score_sums[pid]/trials,
