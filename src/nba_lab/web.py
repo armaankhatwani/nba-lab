@@ -30,6 +30,7 @@ from .demo_impact import synthetic_impact_snapshot
 from .demo_replay import synthetic_replay_snapshots
 from .source import load_snapshot
 from .simulator import simulate_remaining_season
+from .scenario import PlayerAbsence, simulate_scenario
 from .teams import TEAMS
 from .timeline import team_timeline
 
@@ -151,6 +152,21 @@ class ReplaySimRequest(BaseModel):
     seed: int = 2026
     home_score_delta: int = Field(default=0, ge=-20, le=20)
     away_score_delta: int = Field(default=0, ge=-20, le=20)
+
+
+class PlayerAbsenceRequest(BaseModel):
+    player_id: str
+    games_missed: int = Field(ge=1, le=82)
+    minutes_per_game: float = Field(default=34.0, gt=0, le=48)
+    replacement_impact_per_100: float = Field(default=0.0, ge=-10, le=10)
+
+
+class PlayerAbsenceScenarioRequest(BaseModel):
+    as_of: date
+    trials: int = Field(default=5000, ge=100, le=25000)
+    seed: int = 2026
+    alpha: float = Field(default=1000.0, gt=0, le=10000)
+    absences: list[PlayerAbsenceRequest]
 
 
 def _serialize(result):
@@ -574,6 +590,43 @@ def replay_simulate(request: ReplaySimRequest):
             "teams": [asdict(row) for row in season_ripple.teams[:10]],
         },
         "warning": "This is a game-state counterfactual baseline, not a possession-level causal model.",
+    }
+
+
+@app.post("/api/scenario/player-absence")
+def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
+    if not request.absences:
+        raise HTTPException(422, "at least one player absence is required")
+    try:
+        result = simulate_scenario(
+            GAMES,
+            request.as_of,
+            IMPACT_SNAPSHOT,
+            _impact_result(float(request.alpha)),
+            [
+                PlayerAbsence(
+                    player_id=row.player_id,
+                    games_missed=row.games_missed,
+                    minutes_per_game=row.minutes_per_game,
+                    replacement_impact_per_100=row.replacement_impact_per_100,
+                )
+                for row in request.absences
+            ],
+            trials=request.trials,
+            seed=request.seed,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {
+        "as_of": request.as_of.isoformat(),
+        "trials": request.trials,
+        "alpha": request.alpha,
+        "source": IMPACT_SOURCE,
+        "baseline": _serialize(result.baseline),
+        "altered": _serialize(result.altered),
+        "deltas": [asdict(row) for row in result.deltas],
+        "player_absences": [asdict(row) for row in result.player_absences],
+        "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games.",
     }
 
 
