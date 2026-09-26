@@ -64,7 +64,18 @@ def _estimate_lineup_from_context(
     key = tuple(sorted(players))
     rows = [rapm_by_id[player] for player in key]
     additive = sum(row.impact_per_100 for row in rows)
-    standard_error = sqrt(sum(row.standard_error**2 for row in rows))
+    rapm_result = rapm_by_id["__result__"]
+    covariance_index = {
+        player_id: i
+        for i, player_id in enumerate(rapm_result.player_order)
+    }
+    selected = [covariance_index[player] for player in key]
+    variance = sum(
+        rapm_result.player_covariance[i][j]
+        for i in selected
+        for j in selected
+    )
+    standard_error = sqrt(max(0.0, variance))
     z80 = 1.2815515655446004
     lower = additive - z80 * standard_error
     upper = additive + z80 * standard_error
@@ -101,6 +112,7 @@ def estimate_lineup(
     prior_possessions: float = 300.0,
 ) -> LineupEstimate:
     rapm_by_id = {player.player_id: player for player in rapm.players}
+    rapm_by_id["__result__"] = rapm
     observations = _lineup_observations(snapshot.stints)
     return _estimate_lineup_from_context(
         snapshot,
@@ -127,6 +139,7 @@ def optimize_lineups(
         raise ValueError("top_k must be positive")
 
     rapm_by_id = {player.player_id: player for player in rapm.players}
+    rapm_by_id["__result__"] = rapm
     observations = _lineup_observations(snapshot.stints)
     rows = [
         _estimate_lineup_from_context(
