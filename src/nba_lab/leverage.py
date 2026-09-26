@@ -94,9 +94,15 @@ def rank_upcoming_games(
     seed: int = 2026,
     limit: int = 12,
     game_rating_adjustments: dict[str, dict[str, float]] | None = None,
+    excluded_game_ids: set[str] | None = None,
 ) -> tuple[GameLeverage, ...]:
+    excluded = excluded_game_ids or set()
     upcoming = sorted(
-        (game for game in games if game.game_date >= as_of),
+        (
+            game
+            for game in games
+            if game.game_date >= as_of and game.game_id not in excluded
+        ),
         key=lambda game: (game.game_date, game.game_id),
     )[: max(1, limit)]
     rows = [
