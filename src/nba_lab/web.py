@@ -158,6 +158,7 @@ class LineupCompareRequest(BaseModel):
     lineup_b: list[str]
     alpha: float = Field(default=1000.0, gt=0, le=10000)
     prior_possessions: float = Field(default=300.0, gt=0, le=5000)
+    as_of: date | None = None
 
 
 class ReplaySimRequest(BaseModel):
@@ -497,8 +498,11 @@ def impact_path(player_id: str, as_of: date | None = None):
 
 
 @app.get("/api/lineup/players")
-def lineup_players(alpha: float = 1000.0):
-    result = _impact_result(float(alpha))
+def lineup_players(alpha: float = 1000.0, as_of: date | None = None):
+    try:
+        result = _impact_result(float(alpha), as_of)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     impact_by_id = {row.player_id: row for row in result.players}
     rows = []
     for player_id, meta in IMPACT_SNAPSHOT.players.items():
@@ -514,15 +518,24 @@ def lineup_players(alpha: float = 1000.0):
             "rank": impact.rank,
         })
     rows.sort(key=lambda row: (row["team"], row["player_name"]))
-    return {"source": IMPACT_SOURCE, "players": rows}
+    return {
+        "source": IMPACT_SOURCE,
+        "as_of": as_of.isoformat() if as_of else None,
+        "players": rows,
+    }
 
 
 @app.post("/api/lineup/compare")
 def lineup_compare(request: LineupCompareRequest):
     try:
+        snapshot = (
+            IMPACT_SNAPSHOT
+            if request.as_of is None
+            else _impact_snapshot_as_of(request.as_of)
+        )
         result = compare_lineups(
-            IMPACT_SNAPSHOT,
-            _impact_result(float(request.alpha)),
+            snapshot,
+            _impact_result(float(request.alpha), request.as_of),
             tuple(request.lineup_a),
             tuple(request.lineup_b),
             prior_possessions=request.prior_possessions,
@@ -538,6 +551,7 @@ def lineup_compare(request: LineupCompareRequest):
 
     return {
         "source": IMPACT_SOURCE,
+        "as_of": request.as_of.isoformat() if request.as_of else None,
         "alpha": request.alpha,
         "prior_possessions": request.prior_possessions,
         "lineup_a": serialize_lineup(result.lineup_a),
