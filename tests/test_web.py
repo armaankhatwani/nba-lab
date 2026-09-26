@@ -474,3 +474,55 @@ def test_lineup_optimizer_supports_historical_cutoff():
     data = r.json()
     assert data['as_of'] == '2025-12-01'
     assert data['lineups']
+
+
+def test_scenario_lineups_move_traded_players_between_rosters():
+    r = client.post('/api/scenario/lineups?top_k=3', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 31,
+        'alpha': 1000,
+        'trades': [{
+            'player_a_id': '203999',
+            'player_b_id': '1628369',
+            'minutes_per_game': 34
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    teams = {row['team']: row for row in data['teams']}
+    assert {'BOS', 'DEN'} <= set(teams)
+    bos_ids = {
+        meta['player_id']
+        for lineup in teams['BOS']['scenario_lineups']
+        for meta in lineup['player_meta']
+    }
+    den_ids = {
+        meta['player_id']
+        for lineup in teams['DEN']['scenario_lineups']
+        for meta in lineup['player_meta']
+    }
+    assert '203999' in bos_ids
+    assert '1628369' in den_ids
+
+
+def test_scenario_lineups_remove_absent_player_from_available_fives():
+    r = client.post('/api/scenario/lineups?top_k=5', json={
+        'as_of': '2026-01-15',
+        'trials': 200,
+        'seed': 32,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 3,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    bos = next(row for row in data['teams'] if row['team'] == 'BOS')
+    assert all(
+        '1628369' not in lineup['players']
+        for lineup in bos['scenario_lineups']
+    )
