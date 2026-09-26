@@ -75,3 +75,18 @@ def test_lineup_uncertainty_uses_full_rapm_covariance():
         for b in players
     )
     assert abs(result.rapm_standard_error**2 - max(0.0, variance)) < 1e-9
+
+
+def test_lineup_uncertainty_uses_full_rapm_covariance():
+    s = snapshot()
+    rapm = fit_rapm(list(s.stints), alpha=100)
+    players = ("1","2","3","4","5")
+    result = estimate_lineup(s, rapm, players, prior_possessions=100)
+    index = {player_id: i for i, player_id in enumerate(rapm.player_order)}
+    selected = [index[player_id] for player_id in players]
+    expected_variance = sum(
+        rapm.player_covariance[i][j]
+        for i in selected
+        for j in selected
+    )
+    assert abs(result.rapm_standard_error ** 2 - max(0.0, expected_variance)) < 1e-9
