@@ -51,6 +51,23 @@ class ReplayComparison:
     expected_final_margin_delta: float
 
 
+@dataclass(frozen=True)
+class ReplayTimelinePoint:
+    event_index: int
+    action_number: int
+    period: int
+    clock_seconds: float
+    home_score: int
+    away_score: int
+    team: str | None
+    description: str
+    action_type: str
+    sub_type: str
+    home_win_probability: float
+    probability_swing: float
+    expected_final_margin: float
+
+
 def total_seconds_remaining(period: int, clock_seconds: float) -> float:
     if period < 1:
         raise ValueError("period must be positive")
@@ -87,6 +104,79 @@ def _pregame_state(games: list[Game], game: Game, model: EloModel):
     p = min(1 - 1e-6, max(1e-6, p_home))
     expected_margin = sigma * NormalDist().inv_cdf(p)
     return p_home, expected_margin, sigma
+
+
+def _analytic_state_probability(
+    event: ReplayEvent,
+    pregame_margin: float,
+    sigma: float,
+) -> tuple[float, float]:
+    current_margin = event.home_score - event.away_score
+    seconds = total_seconds_remaining(event.period, event.clock_seconds)
+    fraction = seconds / 2880.0
+    if seconds <= 0 and current_margin == 0:
+        fraction = 300.0 / 2880.0
+
+    expected_final_margin = current_margin + pregame_margin * fraction
+    residual_sigma = sigma * sqrt(max(0.0, fraction))
+    if residual_sigma <= 0:
+        if expected_final_margin > 0:
+            probability = 1.0
+        elif expected_final_margin < 0:
+            probability = 0.0
+        else:
+            probability = 0.5
+    else:
+        probability = NormalDist().cdf(expected_final_margin / residual_sigma)
+    return probability, expected_final_margin
+
+
+def replay_probability_timeline(
+    games: list[Game],
+    events: tuple[ReplayEvent, ...] | list[ReplayEvent],
+    model: EloModel | None = None,
+) -> tuple[ReplayTimelinePoint, ...]:
+    if not events:
+        return ()
+    model = model or EloModel()
+    ordered = sorted(events, key=lambda row: row.action_number)
+    game = _game_by_id(games, ordered[0].game_id)
+    if any(row.game_id != game.game_id for row in ordered):
+        raise ValueError("replay timeline events must belong to one game")
+    _, pregame_margin, sigma = _pregame_state(games, game, model)
+
+    rows = []
+    previous_probability = None
+    for index, event in enumerate(ordered):
+        probability, expected_margin = _analytic_state_probability(
+            event,
+            pregame_margin,
+            sigma,
+        )
+        swing = (
+            0.0
+            if previous_probability is None
+            else probability - previous_probability
+        )
+        rows.append(
+            ReplayTimelinePoint(
+                event_index=index,
+                action_number=event.action_number,
+                period=event.period,
+                clock_seconds=event.clock_seconds,
+                home_score=event.home_score,
+                away_score=event.away_score,
+                team=event.team,
+                description=event.description,
+                action_type=event.action_type,
+                sub_type=event.sub_type,
+                home_win_probability=probability,
+                probability_swing=swing,
+                expected_final_margin=expected_margin,
+            )
+        )
+        previous_probability = probability
+    return tuple(rows)
 
 
 def simulate_from_event(
