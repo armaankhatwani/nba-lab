@@ -21,7 +21,7 @@ from .diagnostics import calibration_curve
 from .elo import EloModel
 from .matchup import simulate_matchup
 from .impact import fit_rapm
-from .impact_source import load_impact_snapshot
+from .impact_source import load_impact_snapshot, snapshot_as_of
 from .lineup import compare_lineups
 from .leverage import rank_upcoming_games
 from .replay import compare_replay_intervention
@@ -99,9 +99,23 @@ def _load_replays():
 REPLAY_SNAPSHOTS, REPLAY_SOURCE = _load_replays()
 
 
-@lru_cache(maxsize=16)
-def _impact_result(alpha: float):
-    return fit_rapm(list(IMPACT_SNAPSHOT.stints), alpha=alpha)
+IMPACT_GAME_DATES = {game.game_id: game.game_date for game in GAMES}
+
+
+@lru_cache(maxsize=64)
+def _impact_snapshot_as_of(as_of: date):
+    return snapshot_as_of(
+        IMPACT_SNAPSHOT,
+        as_of,
+        game_dates=IMPACT_GAME_DATES,
+        require_resolved_dates=True,
+    )
+
+
+@lru_cache(maxsize=64)
+def _impact_result(alpha: float, as_of: date | None = None):
+    snapshot = IMPACT_SNAPSHOT if as_of is None else _impact_snapshot_as_of(as_of)
+    return fit_rapm(list(snapshot.stints), alpha=alpha)
 
 
 @lru_cache(maxsize=256)
@@ -495,7 +509,7 @@ def lineup_compare(request: LineupCompareRequest):
     try:
         result = compare_lineups(
             IMPACT_SNAPSHOT,
-            _impact_result(float(request.alpha)),
+            _impact_result(float(request.alpha), request.as_of),
             tuple(request.lineup_a),
             tuple(request.lineup_b),
             prior_possessions=request.prior_possessions,
@@ -639,7 +653,7 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
             GAMES,
             request.as_of,
             IMPACT_SNAPSHOT,
-            _impact_result(float(request.alpha)),
+            _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
             trades=_scenario_trades(request),
@@ -729,7 +743,7 @@ def scenario_matchup(request: ScenarioMatchupRequest):
             GAMES,
             request.as_of,
             IMPACT_SNAPSHOT,
-            _impact_result(float(request.alpha)),
+            _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
             trades=_scenario_trades(request),
@@ -784,7 +798,7 @@ def scenario_sensitivity(request: PlayerAbsenceScenarioRequest, sensitivity_tria
             GAMES,
             request.as_of,
             IMPACT_SNAPSHOT,
-            _impact_result(float(request.alpha)),
+            _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
             trades=_scenario_trades(request),
@@ -842,7 +856,7 @@ def scenario_awards(request: PlayerAbsenceScenarioRequest, award_trials: int = 7
             GAMES,
             request.as_of,
             IMPACT_SNAPSHOT,
-            _impact_result(float(request.alpha)),
+            _impact_result(float(request.alpha), request.as_of),
             _scenario_absences(request),
             flipped_game_ids=request.flipped_game_ids,
             trades=_scenario_trades(request),
