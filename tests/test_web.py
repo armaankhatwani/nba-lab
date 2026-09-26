@@ -410,3 +410,23 @@ def test_scenario_sensitivity_reports_direction_stability_summary():
     assert bos['expected_wins_range'][0] <= bos['expected_wins_range'][1]
     assert isinstance(bos['expected_wins_direction_stable'], bool)
     assert isinstance(bos['championship_direction_stable'], bool)
+
+
+def test_impact_api_supports_historical_cutoff():
+    full = client.get('/api/impact?alpha=1000&limit=500')
+    assert full.status_code == 200
+    historical = client.get('/api/impact?alpha=1000&limit=500&as_of=2025-12-01')
+    assert historical.status_code == 200
+    full_data = full.json()
+    hist_data = historical.json()
+    assert hist_data['as_of'] == '2025-12-01'
+    assert hist_data['stints'] < full_data['stints']
+    assert hist_data['games'] < full_data['games']
+
+
+def test_impact_path_respects_historical_cutoff():
+    r = client.get('/api/impact/1628369/path?as_of=2025-12-01')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['as_of'] == '2025-12-01'
+    assert data['points']
