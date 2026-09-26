@@ -531,3 +531,52 @@ def test_model_elo_surface_keeps_selection_and_holdout_separate():
     assert data['baseline']['home_advantage'] == 65
     best_train = min(row['train']['brier'] for row in data['candidates'])
     assert abs(data['selected_on_train']['train']['brier'] - best_train) < 1e-12
+
+
+def test_scenario_lineups_apply_trade_and_absence_to_selected_game():
+    impact = client.get('/api/impact?alpha=1000&limit=500').json()['players']
+    bos = [row for row in impact if row['team'] == 'BOS']
+    den = [row for row in impact if row['team'] == 'DEN']
+
+    scenario_body = {
+        'as_of': '2026-01-15',
+        'trials': 120,
+        'seed': 91,
+        'alpha': 1000,
+        'trades': [{
+            'player_a_id': bos[0]['player_id'],
+            'player_b_id': den[0]['player_id'],
+            'minutes_per_game': 34
+        }],
+        'absences': [{
+            'player_id': bos[1]['player_id'],
+            'games_missed': 20,
+            'minutes_per_game': 30,
+            'replacement_impact_per_100': 0
+        }]
+    }
+
+    scenario = client.post('/api/scenario/player-absence', json=scenario_body)
+    assert scenario.status_code == 200
+    affected = next(
+        row for row in scenario.json()['affected_games']
+        if 'BOS' in {row['home_team'], row['away_team']}
+    )
+
+    request = {
+        **scenario_body,
+        'game_id': affected['game_id'],
+        'prior_possessions': 300,
+        'top_k': 3,
+    }
+    r = client.post('/api/scenario/lineups', json=request)
+    assert r.status_code == 200
+    data = r.json()
+
+    bos_side = next(row for row in data['teams'] if row['team'] == 'BOS')
+    roster_ids = {row['player_id'] for row in bos_side['roster']['player_meta']}
+    assert bos[0]['player_id'] not in roster_ids
+    assert den[0]['player_id'] in roster_ids
+    assert bos[1]['player_id'] not in roster_ids
+    assert bos_side['lineups']
+    assert len(bos_side['lineups'][0]['players']) == 5
