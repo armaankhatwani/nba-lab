@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from nba_lab.demo import synthetic_demo_games
 from nba_lab.domain import Game
 from nba_lab.matchup import simulate_matchup
 
