@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from math import sqrt
 
 import numpy as np
@@ -13,6 +14,7 @@ class Stint:
     point_diff: float
     home_players: tuple[str, ...]
     away_players: tuple[str, ...]
+    game_date: date | None = None
 
 
 @dataclass(frozen=True)
