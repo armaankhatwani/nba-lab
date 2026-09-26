@@ -61,3 +61,17 @@ def test_lineup_optimizer_enumerates_and_ranks_candidate_fives():
     assert len(rows) == 5
     assert all(len(row.players) == 5 for row in rows)
     assert all(rows[i].blended_net_rating >= rows[i+1].blended_net_rating for i in range(len(rows)-1))
+
+
+def test_lineup_uncertainty_uses_full_rapm_covariance():
+    s = snapshot()
+    rapm = fit_rapm(list(s.stints), alpha=100)
+    players = ("1","2","3","4","5")
+    result = estimate_lineup(s, rapm, players, prior_possessions=100)
+    idx = {player:i for i,player in enumerate(rapm.player_order)}
+    variance = sum(
+        rapm.player_covariance[idx[a]][idx[b]]
+        for a in players
+        for b in players
+    )
+    assert abs(result.rapm_standard_error**2 - max(0.0, variance)) < 1e-9
