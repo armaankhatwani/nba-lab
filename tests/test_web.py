@@ -736,3 +736,14 @@ def test_status_exposes_data_bundle_contract():
         'bundle_manifest',
         'invalid_manifest',
     }
+
+
+def test_model_family_endpoint_exposes_holdout_gate():
+    r = client.get('/api/model/families')
+    assert r.status_code == 200
+    data = r.json()
+    assert data['baseline']['family'] == 'deployed_elo'
+    assert data['tuned_plain']['family'] == 'tuned_plain_elo'
+    assert data['score_aware']['family'] == 'score_aware_elo'
+    assert data['validation_games'] > 0
+    assert data['score_aware_vs_baseline']['games'] == data['validation_games']
