@@ -40,6 +40,9 @@ def simulate_award_futures(
     trials: int = 1_000,
     seed: int = 2026,
     candidate_limit: int = 10,
+    game_rating_adjustments: dict[str, dict[str, float]] | None = None,
+    player_unavailable_game_ids: dict[str, set[str]] | None = None,
+    player_team_overrides: dict[str, str] | None = None,
     model: EloModel | None = None,
 ) -> AwardFutureResult:
     if trials < 1:
@@ -71,6 +74,9 @@ def simulate_award_futures(
         availability[pid]=min(1.0,len(rows)/max(1,team_games_so_far[team]))
 
     ratings=model.fit_as_of(games, as_of + timedelta(days=1))
+    game_adjustments = game_rating_adjustments or {}
+    unavailable = player_unavailable_game_ids or {}
+    team_overrides = player_team_overrides or {}
     rng=random.Random(seed)
     leaders=Counter(); top3=Counter(); score_sums=Counter()
     identity={c.player_id:(c.player_name,c.team) for c in current.candidates if c.player_id in candidate_ids}
@@ -78,16 +84,21 @@ def simulate_award_futures(
     for _ in range(trials):
         sim_games=list(observed_games)
         for game in future_schedule:
-            p_home=model.win_probability(ratings[game.home_team],ratings[game.away_team])
+            per_game = game_adjustments.get(game.game_id, {})
+            home_rating = ratings[game.home_team] + per_game.get(game.home_team, 0.0)
+            away_rating = ratings[game.away_team] + per_game.get(game.away_team, 0.0)
+            p_home=model.win_probability(home_rating,away_rating)
             sim_games.append(_future_game(game,rng.random()<p_home))
 
         sim_logs=list(observed_logs)
         for pid,rows in rows_by_player.items():
             if not rows:
                 continue
-            team=rows[-1].team
+            team=team_overrides.get(pid, rows[-1].team)
             for game in future_schedule:
                 if team not in {game.home_team,game.away_team}:
+                    continue
+                if game.game_id in unavailable.get(pid, set()):
                     continue
                 if rng.random()>availability[pid]:
                     continue
@@ -97,7 +108,7 @@ def simulate_award_futures(
                     game_date=game.game_date,
                     player_id=source.player_id,
                     player_name=source.player_name,
-                    team=team,
+                    team=team_overrides.get(pid, team),
                     minutes=source.minutes,
                     points=source.points,
                     rebounds=source.rebounds,
