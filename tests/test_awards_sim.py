@@ -29,3 +29,26 @@ def test_award_simulation_is_reproducible():
     a=simulate_award_futures(games,logs,date(2026,1,6),trials=100,seed=9)
     b=simulate_award_futures(games,logs,date(2026,1,6),trials=100,seed=9)
     assert a==b
+
+
+def test_award_future_can_block_candidate_games():
+    games,logs=data()
+    baseline=simulate_award_futures(games,logs,date(2026,1,6),trials=300,seed=17)
+    future_ids={g.game_id for g in games if g.game_date>date(2026,1,6)}
+    altered=simulate_award_futures(
+        games,logs,date(2026,1,6),trials=300,seed=17,
+        player_unavailable_game_ids={"a": future_ids},
+    )
+    b={c.player_id:c for c in baseline.candidates}
+    a={c.player_id:c for c in altered.candidates}
+    assert a["a"].mean_final_score <= b["a"].mean_final_score
+
+
+def test_award_future_can_override_player_team():
+    games,logs=data()
+    result=simulate_award_futures(
+        games,logs,date(2026,1,6),trials=50,seed=3,
+        player_team_overrides={"a":"BOS"},
+    )
+    row=next(c for c in result.candidates if c.player_id=="a")
+    assert row.team=="BOS"
