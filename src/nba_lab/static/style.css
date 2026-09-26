@@ -38,3 +38,5 @@
 .scenario-leverage-row{cursor:pointer}.scenario-leverage-row:hover{background:#141c20}
 
 .scenario-future-card{margin:0 12px 12px;border:1px solid var(--line2);background:#10161a;padding:11px}.scenario-future-head label{font-size:9px;color:#9aa5ab;display:flex;align-items:center;gap:7px}.scenario-future-head input{accent-color:var(--orange)}#scenario-future-fields{margin-top:10px;display:grid;grid-template-columns:1.5fr 1fr;gap:8px}#scenario-future-fields[hidden]{display:none}#scenario-future-fields label{font-size:8px;color:#748089}#scenario-future-fields select{display:block;width:100%;margin-top:5px;background:#0a0f12;border:1px solid #303b43;color:#edf0ee;padding:7px}#scenario-future-fields small{grid-column:1 / -1;font-size:8px;color:#66737b;line-height:1.45}@media(max-width:650px){#scenario-future-fields{grid-template-columns:1fr}#scenario-future-fields small{grid-column:auto}}
+
+.leverage-branch-actions{display:flex;gap:4px;margin-top:6px}.leverage-branch-actions button{border:1px solid #344149;background:#0c1114;color:#87939b;padding:3px 5px;font-size:7px;cursor:pointer}.leverage-branch-actions button:hover{border-color:#617077;color:#fff}
