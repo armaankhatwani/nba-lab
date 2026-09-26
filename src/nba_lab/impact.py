@@ -34,6 +34,8 @@ class RapmResult:
     home_court_per_100: float
     weighted_rmse: float
     players: tuple[PlayerImpact, ...]
+    player_order: tuple[str, ...]
+    player_covariance: tuple[tuple[float, ...], ...]
 
 
 def _matrix(stints: list[Stint], players: list[str]):
@@ -77,7 +79,7 @@ def _fit_arrays(x,y,w,alpha:float):
     sigma2=float(np.sum(w*(residual**2))/residual_df)
     covariance=sigma2*(lhs_inv@gram@lhs_inv)
     standard_errors=np.sqrt(np.maximum(0.0,np.diag(covariance)))
-    return beta,rmse,standard_errors
+    return beta,rmse,standard_errors,covariance
 
 
 def fit_rapm(stints:list[Stint],alpha:float=1000.0)->RapmResult:
@@ -87,7 +89,7 @@ def fit_rapm(stints:list[Stint],alpha:float=1000.0)->RapmResult:
         raise ValueError("alpha must be positive")
     players=sorted({p for s in stints for p in (*s.home_players,*s.away_players)})
     x,y,w=_matrix(stints,players)
-    beta,rmse,standard_errors=_fit_arrays(x,y,w,alpha)
+    beta,rmse,standard_errors,covariance=_fit_arrays(x,y,w,alpha)
     possessions={p:0.0 for p in players}
     for stint in stints:
         for player in (*stint.home_players,*stint.away_players):
@@ -109,6 +111,11 @@ def fit_rapm(stints:list[Stint],alpha:float=1000.0)->RapmResult:
         home_court_per_100=float(beta[-1]),
         weighted_rmse=rmse,
         players=impacts,
+        player_order=tuple(players),
+        player_covariance=tuple(
+            tuple(float(value) for value in row)
+            for row in covariance[:-1, :-1]
+        ),
     )
 
 
@@ -132,7 +139,7 @@ def tune_alpha(
             test_idx=[i for i,s in enumerate(stints) if game_fold[s.game_id]==fold]
             if not train_idx or not test_idx:
                 continue
-            beta,_,_=_fit_arrays(all_x[train_idx],all_y[train_idx],all_w[train_idx],alpha)
+            beta,_,_,_=_fit_arrays(all_x[train_idx],all_y[train_idx],all_w[train_idx],alpha)
             pred=all_x[test_idx]@beta
             loss=float(np.average((pred-all_y[test_idx])**2,weights=all_w[test_idx]))
             fold_losses.append(loss)
