@@ -509,7 +509,7 @@ def lineup_compare(request: LineupCompareRequest):
     try:
         result = compare_lineups(
             IMPACT_SNAPSHOT,
-            _impact_result(float(request.alpha), request.as_of),
+            _impact_result(float(request.alpha)),
             tuple(request.lineup_a),
             tuple(request.lineup_b),
             prior_possessions=request.prior_possessions,
