@@ -300,3 +300,23 @@ def test_scenario_sensitivity_preserves_historical_branch_across_worlds():
     data = r.json()
     # With no player-impact intervention, lower/point/upper are identical worlds.
     assert data['impact_lower']['teams'] == data['point']['teams'] == data['impact_upper']['teams']
+
+
+def test_scenario_reports_affected_schedule_probability_shifts():
+    r = client.post('/api/scenario/player-absence', json={
+        'as_of': '2026-01-15',
+        'trials': 120,
+        'seed': 41,
+        'alpha': 1000,
+        'absences': [{
+            'player_id': '1628369',
+            'games_missed': 4,
+            'minutes_per_game': 36,
+            'replacement_impact_per_100': 0
+        }]
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data['affected_games']) == 4
+    assert all('home_win_probability_delta' in row for row in data['affected_games'])
+    assert any(abs(row['home_win_probability_delta']) > 0 for row in data['affected_games'])
