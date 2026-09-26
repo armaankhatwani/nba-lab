@@ -190,6 +190,7 @@ class PlayerAbsenceScenarioRequest(BaseModel):
     absences: list[PlayerAbsenceRequest] = Field(default_factory=list)
     flipped_game_ids: list[str] = Field(default_factory=list)
     trades: list[TradeRequest] = Field(default_factory=list)
+    include_impact_sensitivity: bool = False
 
 
 class ScenarioMatchupRequest(PlayerAbsenceScenarioRequest):
@@ -659,6 +660,7 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
             trades=_scenario_trades(request),
             trials=request.trials,
             seed=request.seed,
+            include_impact_sensitivity=request.include_impact_sensitivity,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -724,6 +726,7 @@ def player_absence_scenario(request: PlayerAbsenceScenarioRequest):
         "historical_flips": [asdict(row) for row in result.historical_flips],
         "trades": [asdict(row) for row in result.trades],
         "affected_games": affected_games,
+        "impact_sensitivity": [asdict(row) for row in result.impact_sensitivity],
         "award_ripple": award_ripple[:8],
         "warning": "Player absences use RAPM as an association-based strength prior, assume a stated replacement level, and affect only the next scheduled regular-season games. Historical flips rebuild point-in-time team and award context.",
     }
