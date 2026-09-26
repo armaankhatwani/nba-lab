@@ -357,6 +357,9 @@ function clearScenarioResults(){
   $('scenario-bars').innerHTML='<span>Run the scenario to reveal league-wide effects.</span>';
   $('scenario-rows').innerHTML='';
   $('scenario-award-panel').hidden=true;
+  $('scenario-schedule-status').textContent='run a scenario';
+  $('scenario-schedule').classList.add('empty');
+  $('scenario-schedule').innerHTML='<span>Affected future games will appear here with their combined strength and win-probability shifts.</span>';
   $('scenario-sensitivity-rows').classList.add('empty');
   $('scenario-sensitivity-rows').innerHTML='<span>Run a scenario, then compare lower-signal, point, and upper-signal player-impact worlds.</span>';
   $('scenario-award-future-bars').classList.add('empty');
@@ -715,6 +718,7 @@ function renderScenario(d){
   });
   $('scenario-effects').innerHTML=historyCards.concat(tradeCards,absenceCards).join('');
   renderScenarioAwardRipple(d);
+  renderScenarioSchedule(d);
   renderScenarioBars();
   $('scenario-rows').innerHTML=d.baseline.teams.map(function(x){
     const y=altered[x.team],z=deltas.find(function(v){return v.team===x.team});
@@ -722,6 +726,31 @@ function renderScenario(d){
       +'<td class="'+(z.expected_wins_delta>=0?'positive':'negative')+'">'+signed(z.expected_wins_delta)+'</td>'
       +'<td class="'+(z.playoffs_probability_delta>=0?'positive':'negative')+'">'+(z.playoffs_probability_delta>=0?'+':'')+(100*z.playoffs_probability_delta).toFixed(1)+' pts</td>'
       +'<td class="'+(z.championship_probability_delta>=0?'positive':'negative')+'">'+(z.championship_probability_delta>=0?'+':'')+(100*z.championship_probability_delta).toFixed(1)+' pts</td></tr>';
+  }).join('');
+}
+
+
+function renderScenarioSchedule(d){
+  const rows=d.affected_games||[];
+  const target=$('scenario-schedule');
+  $('scenario-schedule-status').textContent=rows.length?rows.length+' affected games':'no future strength-adjusted games';
+  if(!rows.length){
+    target.classList.add('empty');
+    target.innerHTML='<span>This scenario changes history only; no future game receives a player/trade strength adjustment.</span>';
+    return;
+  }
+  target.classList.remove('empty');
+  target.innerHTML=rows.slice(0,16).map(function(g){
+    const deltas=[];
+    if(Math.abs(g.away_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.away_team+' '+(g.away_elo_delta>=0?'+':'')+g.away_elo_delta.toFixed(0)+' Elo</span>');
+    if(Math.abs(g.home_elo_delta)>.01)deltas.push('<span class="scenario-game-delta">'+g.home_team+' '+(g.home_elo_delta>=0?'+':'')+g.home_elo_delta.toFixed(0)+' Elo</span>');
+    const delta=g.home_win_probability_delta;
+    return '<div class="scenario-game-row">'
+      +'<div class="scenario-game-date">'+g.date+'</div>'
+      +'<div class="scenario-game-matchup"><strong>'+g.away_team+' @ '+g.home_team+'</strong><span>'+pct(g.baseline_home_win_probability)+' → '+pct(g.altered_home_win_probability)+' home win</span></div>'
+      +'<div class="scenario-game-deltas">'+deltas.join('')+'</div>'
+      +'<div class="scenario-game-prob"><strong class="'+(delta>=0?'positive':'negative')+'">'+(delta>=0?'+':'')+(100*delta).toFixed(1)+' pts</strong><span>home-win shift</span></div>'
+      +'</div>';
   }).join('');
 }
 
